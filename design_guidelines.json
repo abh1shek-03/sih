@@ -1,0 +1,30 @@
+{
+  "project_name": "MediConnect",
+  "tagline": "Care that finds you.",
+  "app_type": "hybrid_fullstack",
+  "theme": {
+    "archetype": "ORGANIC & EARTHY / CLINICAL CALM",
+    "primary_color": "#1F6F6B",
+    "primary_color_forbidden": "#1B93A4",
+    "text_color": "#16233A",
+    "background_color": "#F4F7F6",
+    "status_colors": {
+      "available": "#10B981",
+      "limited": "#F59E0B",
+      "full": "#EF4444"
+    }
+  },
+  "typography": {
+    "headings": "Fraunces (Serif) - directory-board weight",
+    "body": "IBM Plex Sans"
+  },
+  "components": [
+    "Hospital Console",
+    "Patient Lookup",
+    "Doctor Roster",
+    "Ward Management",
+    "Emergency Triage",
+    "Google Maps Surface"
+  ],
+  "instructions_to_main_agent": "Ensure all interactive elements have data-testid. Use Tailwind and Shadcn React JS components. Follow strict clinical calm tone and derived data rules."
+}
