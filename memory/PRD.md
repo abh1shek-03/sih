@@ -24,6 +24,12 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 
 ## What's been implemented
 
+### 2026-09-06 — Symptom-to-Care Matching Assistant (Claude)
+- Backend `POST /api/triage` (`/app/backend/triage.py`): runs the user's unified multilingual symptom-matching system prompt on Claude Sonnet 4.6 via Emergent Universal Key (`EMERGENT_LLM_KEY` in backend/.env). Frontend passes the current directory as HOSPITAL_DATA (unreported figures sent as `null`, doctors `unavailable`); backend filters any match not present in the supplied data; logs each run to Mongo `triage_logs` with a session id.
+- Frontend: third "Describe symptoms" tab in Patient Lookup (`components/SymptomTriage.jsx`, `lib/triage.js`) — urgency pill, detected language, likely specialty, response text in patient's language, clarifying question, directory-only matches (click opens hospital card), disclaimer.
+- Smart Emergency screen `/emergency` (`pages/Emergency.jsx`): shown when `redirectToEmergency` is true — Call 108 / 112 buttons, emergency message, explicit "emergency hospital data not connected yet" note (user will supply data later).
+- Tested end-to-end (test_reports/iteration_3.json): routine ENT match, emergency redirect, clarifying question, Punjabi no-match, mobile no-overflow, regression.
+
 ### 2026-09-04
 - Replaced starter screen with MediConnect clinical-calm interface using Fraunces and IBM Plex Sans, teal/navy palette, status language, responsive layouts, and meaningful motion.
 - Added 10 supplied Patiala hospitals and the supplied doctor records, including specialties, experience, ratings where supplied, consultation fees, doctor counts, locations/areas, and OPD/opening hours.
@@ -33,6 +39,8 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 - Passed production build and frontend end-to-end verification for desktop/mobile flows. MOCKED: local directory data, local staff session/ward state, and Google Maps search URLs.
 
 ## Prioritized backlog
+- P0: User to supply verified emergency hospital data (emergency-ready hospitals, ICU beds, contacts) to populate the Smart Emergency screen.
+- P1: IVR/voice agent (Vapi/Bolna) hook using `responseText` from /api/triage for TTS.
 - P0: Configure Firebase project credentials and implement real email/password staff authentication with admin-approved role mapping.
 - P0: Obtain verified hospital contacts, coordinates, ward totals, and staff-confirmed availability before presenting live capacity/status.
 - P1: Add the two remaining Patiala hospitals if the intended list is 12; only embed records supplied or verified by the user.

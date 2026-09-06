@@ -68,6 +68,8 @@ async def get_status_checks():
 
 # Include the router in the main app
 app.include_router(api_router)
+from triage import build_router
+app.include_router(build_router(db))
 
 app.add_middleware(
     CORSMiddleware,
