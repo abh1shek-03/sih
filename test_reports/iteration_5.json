@@ -1,0 +1,24 @@
+{
+  "summary": "Full pass on the new Live Bed Counts backend + Console/Lookup wiring and Search Synonyms. 11/11 pytest tests pass for /api/hospitals/* endpoints (autoseed, generic vs park/rajindra overrides, admit/discharge cap+floor, doctor status persistence, 422 on invalid status, 404 on unknown ward, bulk GET). Frontend verified end-to-end: Console (/console) shows the new console-hospital-select dropdown with all 12 hospitals; selecting Park Hospital loads live ICU data, clicking discharge decrements 64->63 available, switching to a different hospital and back preserves 63 (persistence). Doctor roster tab shows 32 real Park doctors (no fake Dr. Priya Nair), and toggling Dr. Sidharth Garg to Available immediately reflects on Patient Lookup /lookup when the Park Hospital card is expanded (Cardiac Sciences · AVAILABLE pill), alongside the STAFF-UPDATED tag and 'General ward: 235/235 · ICU: 63/65 · Maternity: 12/12' ward chips. Search synonyms verified: 'cardiology' returns 11 rows including both Cardiology (PHI) and Cardiac Sciences (Park) doctors; 'ENT' surfaces Parvinderjit (Park ENT) + Sanjeev Bhagat (Rajindra); 'orthopaedics' surfaces Manuj Wadhwa (Orthopaedics & Joint Replacement Surgery, Manipal) + Sorabh Garg (Orthopaedics, Joint Replacement & Sports Medicine, Park); exact 'Dr. Sidharth Garg' returns 1; empty search returns all 138 doctors. Mobile 390px: 0px horizontal overflow on both Lookup (expanded Park card with ward-mini chips) and Console (with hospital-select).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_hospital_status.py",
+    "/app/test_reports/pytest/hospital_status_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Search substring matching is very permissive for short queries: e.g. searching 'ENT' returns 41 rows because 'ent' is a substring of unrelated tokens like 'Interventional Cardiology', 'General Physician' hospital names, etc. Consider matching on whole-word boundaries or restricting substring-match to the query itself while requiring exact/prefix match on alias-expanded terms — otherwise short queries feel noisy.",
+    "hospital_status.py: admit endpoint semantics (data-testid=admit-* INCREASES available while data-testid=discharge-* DECREASES available) is intentionally kept per the review request but the endpoint/testid naming is semantically inverted from staff-facing meaning ('admit' should reduce available beds, 'discharge' should free one up). Backend routes match the testids, so it is consistent, but a rename in a future pass would prevent confusion for any new developer reading the code.",
+    "hospital_status.py raises HTTPException 404 for unknown ward but silently seeds a hospital doc even for invalid/typo'd hospital ids in every GET/POST/PATCH call — could grow the collection unbounded if an attacker probes random ids. Consider validating hospital_id against the known 12-hospital directory before seeding.",
+    "hospital_status.py has no rate limiting or auth — since staff sign-in is a demo with no credential check, anyone can call admit/discharge/patch doctor status and mutate live data other patients see. Fine for demo but flag before production."
+  ],
+  "updated_files": ["/app/backend/tests/test_hospital_status.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all requested flows)"},
+  "test_credentials": "N/A - app unauthenticated (demo staff session)",
+  "seed_data_creation": "Random test hospital ids created in Mongo hospital_status collection via autoseed during pytest run; Park Hospital ICU was decremented once during E2E test then restored via admit call.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "hospital_status.py auto-seeds a doc for ANY hospital_id on first call — including invalid ones. Data is stored in Mongo collection `hospital_status` and is shared globally across all browser sessions (verified via urllib fetch after browser mutation). Testids: console-hospital-select, ward-row-{icu|general|maternity}, admit-{ward}, discharge-{ward}, toggle-doctor-{doctorId}, hospital-ward-availability-{hospitalId}. Ward totals: park-patiala=235/65/12, rajindra=1009/8/12, all others=40/8/12.",
+  "rca of the issue": "No issues found."
+}

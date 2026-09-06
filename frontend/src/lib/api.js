@@ -155,8 +155,43 @@ const hospitals = [
   }),
 ];
 
+// Aliases so a search for "Cardiology" also surfaces doctors listed as "Cardiac Sciences", etc.
+const specialtyGroups = [
+  ["cardiology", "cardiac sciences", "cardiothoracic vascular surgery", "cardiothoracic & vascular surgery", "cardiothoracic surgery", "interventional cardiology", "clinical cardiology"],
+  ["ent", "ear-nose-throat (ent) specialist", "otolaryngology", "ent surgery"],
+  ["gynaecology", "gynecology", "obstetrics & gynaecology", "obstetrics"],
+  ["neurology", "neuro sciences", "neuro sciences – brain & spine", "neurosurgery", "neurosurgery & spine surgery", "brain & spine surgeon"],
+  ["orthopaedics", "orthopedics", "ortho", "orthopaedics & joint replacement", "orthopaedics, joint replacement & sports medicine", "orthopaedics & joint replacement surgery"],
+  ["dermatology", "dermatology & cosmetology", "dermatology & std", "skin"],
+  ["urology", "urology & andrology"],
+  ["gastroenterology", "gastro sciences", "medical gastroenterology", "gastroenterology & hepatology"],
+  ["pediatrics", "paediatrics", "paediatric surgery", "paediatrics & child care", "paediatrics & neonatology", "child care"],
+  ["psychiatry", "psychiatry & de-addiction"],
+  ["general physician", "internal medicine", "medicine", "general medicine"],
+  ["general surgeon", "general surgery", "general & laparoscopic surgery", "laparoscopic surgery"],
+  ["ophthalmologist", "ophthalmology", "eye"],
+  ["nephrology", "renal sciences", "renal sciences & kidney transplant", "kidney transplant"],
+  ["pulmonology", "pulmonary medicine", "chest medicine", "tb & chest diseases", "chest & respiratory diseases"],
+];
+
+const expandSearchTerms = (query) => {
+  const q = query.toLowerCase().trim();
+  if (!q) return [q];
+  const matchedGroups = specialtyGroups.filter(g => g.some(term => term.includes(q) || q.includes(term)));
+  return [q, ...matchedGroups.flat()];
+};
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const api = {
   getHospitals: () => hospitals,
-  searchDoctors: (query = "") => hospitals.flatMap(h => h.doctors.map(d => ({ ...d, hospital: h.name }))).filter(d => `${d.name} ${d.specialization} ${d.hospital}`.toLowerCase().includes(query.toLowerCase())),
+  searchDoctors: (query = "") => {
+    const all = hospitals.flatMap(h => h.doctors.map(d => ({ ...d, hospital: h.name })));
+    const q = query.toLowerCase().trim();
+    if (!q) return all;
+    const terms = expandSearchTerms(q).filter(Boolean);
+    const regexes = terms.map(t => new RegExp(`\\b${escapeRegex(t)}`, "i"));
+    return all.filter(d => { const haystack = `${d.name} ${d.specialization} ${d.hospital}`; return regexes.some(r => r.test(haystack)); });
+  },
   getEmergencyReadyHospitals: () => hospitals.filter(h => h.emergency && h.emergency.available),
 };

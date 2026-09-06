@@ -72,6 +72,8 @@ from triage import build_router
 app.include_router(build_router(db))
 from voice import build_router as build_voice_router
 app.include_router(build_voice_router(db))
+from hospital_status import build_router as build_hospital_status_router
+app.include_router(build_hospital_status_router(db))
 
 app.add_middleware(
     CORSMiddleware,

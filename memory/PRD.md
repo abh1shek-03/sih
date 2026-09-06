@@ -24,6 +24,13 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 
 ## What's been implemented
 
+### 2026-09-06 (later still) — Live Bed Counts (own backend, no Firebase) + Search Synonyms
+- **Live Bed Counts without Firebase**: since Firebase credentials are still unavailable, ward/bed and doctor-availability persistence now runs on MediConnect's own FastAPI + MongoDB stack instead. New `backend/hospital_status.py` router: `GET /api/hospitals/{id}/status` (auto-seeds ward totals — generic hospitals get 40 general/8 ICU/12 maternity demo baseline; Park Hospital gets 235/65/12 and Rajindra gets 1009/8/12 from the user-supplied bed figures), `GET /api/hospitals/status?ids=...` (bulk), `POST .../wards/{wardId}/admit|discharge`, `PATCH .../doctors/{doctorId}`. Data is stored in Mongo collection `hospital_status`, shared globally across all sessions.
+- `Console` (App.js) rewritten: added a hospital selector dropdown (all 12 hospitals, `data-testid=console-hospital-select`); ward capacity and doctor roster tabs now read/write the real backend instead of local demo React state.
+- `Lookup`/`HospitalCard`: bulk-fetches live status on load and overlays it on each hospital card — collapsed card shows "`<available>/<total>` beds available" with a "STAFF-UPDATED" tag, expanded card shows a ward-chip line and doctor status pills reflect live Console updates. Verified end-to-end: a discharge in Console for Park Hospital's ICU ward is reflected on Patient Lookup immediately.
+- **Search Synonyms**: `lib/api.js` adds a specialty alias table (Cardiology↔Cardiac Sciences, ENT↔Otolaryngology, Orthopaedics↔Ortho, etc.) and switched `searchDoctors` to word-boundary regex matching (reduces false positives vs. plain substring) so a search for "cardiology" also surfaces "Cardiac Sciences" doctors, etc.
+- Tested via testing_agent (test_reports/iteration_5.json, 11/11 backend tests): persistence across requests verified, Console↔Lookup live-update loop verified, synonym search verified for cardiology/ENT/orthopaedics, no mobile overflow. Minor code-review notes (no auth/rate-limiting on the status endpoints, since staff sign-in remains a demo session) are flagged as known, acceptable for the current demo scope.
+
 ### 2026-09-06 (later) — Verified hospital data expansion + Voice Assistant Hook
 - Added user-supplied official directory data for 5 hospitals in `lib/api.js`: updated Manipal Hospitals, Park Hospital, and Rajindra Hospital with full specialty lists, complete doctor rosters and doctor bios (qualification/experience/expertise/designation where supplied, "Not publicly reported" otherwise); added 2 brand-new hospitals — AAS Medicare and Patiala Heart Institute & Multispeciality Hospital — bringing the directory to 12 hospitals total (completes backlog Task 6).
 - `HospitalCard` (App.js) now renders address/email, an "Emergency-ready" banner, a specialty-chip list, and doctor bio lines. Home hero stats (hospital/doctor counts) are now computed dynamically from the directory instead of hardcoded.
@@ -46,16 +53,15 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 - Passed production build and frontend end-to-end verification for desktop/mobile flows. MOCKED: local directory data, local staff session/ward state, and Google Maps search URLs.
 
 ## Prioritized backlog
-- P0: Configure Firebase project credentials and implement real email/password staff authentication with admin-approved role mapping. (User deferred again this session — "skip for now")
-- P0: Obtain verified hospital contacts, coordinates, ward totals, and staff-confirmed *live* availability before presenting real-time capacity/status (directory-level static data for 12 hospitals is now in place; live bed counts remain unverified/"Not reported").
-- P1: IVR/voice agent (Vapi/Bolna) hook using `responseText` from /api/triage for TTS — superseded/partially delivered by the in-app OpenAI TTS/STT voice hook (mic input + Listen playback) added 2026-09-06.
-- P1: Add Firestore listeners and trusted server/Cloud Function updates for wards, doctors, audit logs, and review aggregates.
+- P0: Configure Firebase project credentials and implement real email/password staff authentication with admin-approved role mapping. (User deferred again this session — "skip for now"; live bed-count persistence no longer depends on Firebase, now on MediConnect's own backend.)
+- P1: Add real auth/rate-limiting to `/api/hospitals/*` status-mutation endpoints before any production use (currently anyone can admit/discharge/toggle doctors — acceptable for demo staff-sign-in scope only).
+- P1: Add Firestore listeners and trusted server/Cloud Function updates for wards, doctors, audit logs, and review aggregates. (Superseded in spirit by the new Mongo-backed live status endpoints; revisit once real Firebase/staff-auth is connected.)
 - P1: Replace Maps search links with the Google Maps JavaScript rendering surface once a browser Maps key exists.
-- P2: Doctor/specialty search synonym mapping (e.g. "Cardiac Sciences" ↔ "Cardiology") so cross-hospital searches surface all matching doctors — flagged by testing agent, not yet implemented.
+- P2: Tighten search-synonym matching further (currently word-boundary regex; still some noise on very short queries like "ent").
 - P2: Add patient name/phone profile flow, emergency triage ordering, reviews, disputes, and verified badges.
 
 ## Next tasks
-1. Receive Firebase web configuration and enable Auth/Firestore (still blocked — user has no keys yet).
+1. Receive Firebase web configuration and enable Auth/Firestore (still blocked — user has no keys yet); once available, migrate hospital_status collection data over or keep Mongo as the system of record.
 2. Receive Google Maps browser key and verified GeoPoints/geohashes.
-3. Receive staff-approved ward totals and doctor status confirmations / live ICU-bed feed for the emergency screen.
-4. Consider doctor-specialty synonym mapping for better search recall.
+3. Receive staff-approved live ICU-bed feed for the emergency screen (currently static hospital-supplied figures only).
+4. Add real staff authentication (currently demo sign-in with no credential check) before the live admit/discharge endpoints go to production.
