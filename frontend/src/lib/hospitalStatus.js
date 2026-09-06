@@ -13,16 +13,16 @@ export const fetchStatus = async (hospitalId) => {
 };
 
 export const admitWard = async (hospitalId, wardId) => {
-  const { data } = await axios.post(`${API}/api/hospitals/${hospitalId}/wards/${wardId}/admit`);
+  const { data } = await axios.post(`${API}/api/hospitals/${hospitalId}/wards/${wardId}/admit`, {}, { withCredentials: true });
   return data;
 };
 
 export const dischargeWard = async (hospitalId, wardId) => {
-  const { data } = await axios.post(`${API}/api/hospitals/${hospitalId}/wards/${wardId}/discharge`);
+  const { data } = await axios.post(`${API}/api/hospitals/${hospitalId}/wards/${wardId}/discharge`, {}, { withCredentials: true });
   return data;
 };
 
 export const setDoctorStatus = async (hospitalId, doctorId, status) => {
-  const { data } = await axios.patch(`${API}/api/hospitals/${hospitalId}/doctors/${doctorId}`, { status });
+  const { data } = await axios.patch(`${API}/api/hospitals/${hospitalId}/doctors/${doctorId}`, { status }, { withCredentials: true });
   return data;
 };

@@ -74,6 +74,8 @@ from voice import build_router as build_voice_router
 app.include_router(build_voice_router(db))
 from hospital_status import build_router as build_hospital_status_router
 app.include_router(build_hospital_status_router(db))
+from auth import build_router as build_auth_router, seed_staff_accounts
+app.include_router(build_auth_router(db))
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,6 +91,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def seed_data():
+    await seed_staff_accounts(db)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

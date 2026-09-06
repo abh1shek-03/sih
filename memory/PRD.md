@@ -24,6 +24,12 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 
 ## What's been implemented
 
+### 2026-09-06 (latest) — Real Staff Login (JWT) + Emergency Live Feed
+- **Real Staff Login**: replaced the fake demo "sign in" button with real email/password auth. `backend/auth.py` — bcrypt password hashing + JWT (HS256, 8h, httpOnly cookie `access_token`). One demo account auto-seeded per hospital at startup (`<hospitalId>@mediconnect.demo`, shared password `MediConnect@2026`, see `/app/memory/test_credentials.md`). Each login is scoped to exactly one hospital (user's explicit choice) — Console no longer has a hospital dropdown; `/api/hospitals/{id}/wards/*` and `/doctors/*` mutation endpoints now require auth and return 403 if a staff user tries to touch a hospital other than their own, 401 with no session.
+- **Emergency Live Feed**: `pages/Emergency.jsx` now pulls live ICU ward data (`fetchAllStatus`) for each emergency-ready hospital instead of static text, showing "ICU: X/Y available" plus a "hospital-confirmed" tag (Park Hospital's real 65-bed ICU) vs. "demo baseline" tag (all other hospitals' generic 8-bed default) — keeps the safety framing honest per the no-fabrication rule while still being "live".
+- Backend `hospital_status.py` ward objects gained a `confirmed: bool` flag (true only for Park's general+icu and Rajindra's general ward, which come from real hospital-supplied totals); `_get_or_seed` now reconciles ward metadata on every read so pre-existing seeded Mongo docs pick up new fields without a manual migration.
+- Tested via testing_agent (iteration_6.json): 31/31 backend tests (rewrote the pre-existing test suite to use real login), full frontend pass — login/logout, session persistence across reload, cross-hospital 403, Emergency confirmed/demo-baseline tags, no mobile overflow.
+
 ### 2026-09-06 (later still) — Live Bed Counts (own backend, no Firebase) + Search Synonyms
 - **Live Bed Counts without Firebase**: since Firebase credentials are still unavailable, ward/bed and doctor-availability persistence now runs on MediConnect's own FastAPI + MongoDB stack instead. New `backend/hospital_status.py` router: `GET /api/hospitals/{id}/status` (auto-seeds ward totals — generic hospitals get 40 general/8 ICU/12 maternity demo baseline; Park Hospital gets 235/65/12 and Rajindra gets 1009/8/12 from the user-supplied bed figures), `GET /api/hospitals/status?ids=...` (bulk), `POST .../wards/{wardId}/admit|discharge`, `PATCH .../doctors/{doctorId}`. Data is stored in Mongo collection `hospital_status`, shared globally across all sessions.
 - `Console` (App.js) rewritten: added a hospital selector dropdown (all 12 hospitals, `data-testid=console-hospital-select`); ward capacity and doctor roster tabs now read/write the real backend instead of local demo React state.
@@ -53,15 +59,15 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 - Passed production build and frontend end-to-end verification for desktop/mobile flows. MOCKED: local directory data, local staff session/ward state, and Google Maps search URLs.
 
 ## Prioritized backlog
-- P0: Configure Firebase project credentials and implement real email/password staff authentication with admin-approved role mapping. (User deferred again this session — "skip for now"; live bed-count persistence no longer depends on Firebase, now on MediConnect's own backend.)
-- P1: Add real auth/rate-limiting to `/api/hospitals/*` status-mutation endpoints before any production use (currently anyone can admit/discharge/toggle doctors — acceptable for demo staff-sign-in scope only).
-- P1: Add Firestore listeners and trusted server/Cloud Function updates for wards, doctors, audit logs, and review aggregates. (Superseded in spirit by the new Mongo-backed live status endpoints; revisit once real Firebase/staff-auth is connected.)
+- P0: Configure Firebase project credentials (still optional now — real staff auth and live bed counts no longer depend on it; only Firestore/Google social login specifically would need it if ever requested).
+- P1: Password reset / account-rotation flow for staff logins (currently a fixed shared demo password, no reset endpoint — acceptable for demo scope).
 - P1: Replace Maps search links with the Google Maps JavaScript rendering surface once a browser Maps key exists.
+- P2: Split App.js into per-page files for maintainability (flagged by testing agent, not blocking).
 - P2: Tighten search-synonym matching further (currently word-boundary regex; still some noise on very short queries like "ent").
 - P2: Add patient name/phone profile flow, emergency triage ordering, reviews, disputes, and verified badges.
 
 ## Next tasks
-1. Receive Firebase web configuration and enable Auth/Firestore (still blocked — user has no keys yet); once available, migrate hospital_status collection data over or keep Mongo as the system of record.
-2. Receive Google Maps browser key and verified GeoPoints/geohashes.
-3. Receive staff-approved live ICU-bed feed for the emergency screen (currently static hospital-supplied figures only).
-4. Add real staff authentication (currently demo sign-in with no credential check) before the live admit/discharge endpoints go to production.
+1. Receive Google Maps browser key and verified GeoPoints/geohashes.
+2. Decide if real hospital admins should be able to reset/rotate their own staff password (currently fixed demo password for all 12 seeded accounts).
+3. Receive Firebase web configuration only if Google social login or Firestore migration is explicitly wanted later (no longer a blocker for core functionality).
+4. Consider surfacing the emergency live-feed "hospital-confirmed" vs "demo baseline" distinction elsewhere in the UI (e.g. Lookup card) for full consistency.

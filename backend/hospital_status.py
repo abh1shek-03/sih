@@ -2,29 +2,31 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/hospitals", tags=["hospital-status"])
 
 WARD_TEMPLATE = [
-    {"id": "general", "name": "General ward", "total": 40},
-    {"id": "icu", "name": "ICU", "total": 8},
-    {"id": "maternity", "name": "Maternity", "total": 12},
+    {"id": "general", "name": "General ward", "total": 40, "confirmed": False},
+    {"id": "icu", "name": "ICU", "total": 8, "confirmed": False},
+    {"id": "maternity", "name": "Maternity", "total": 12, "confirmed": False},
 ]
 
-# Ward totals sourced from the hospital-supplied bed figures where known; every other
-# hospital keeps the same generic demo baseline staff can override via admit/discharge.
+# Ward totals sourced from the hospital-supplied bed figures where known ("confirmed": True);
+# every other ward keeps the same generic demo baseline staff can override via admit/discharge.
 WARD_OVERRIDES: Dict[str, List[Dict]] = {
     "park-patiala": [
-        {"id": "general", "name": "General ward", "total": 235},
-        {"id": "icu", "name": "ICU", "total": 65},
-        {"id": "maternity", "name": "Maternity", "total": 12},
+        {"id": "general", "name": "General ward", "total": 235, "confirmed": True},
+        {"id": "icu", "name": "ICU", "total": 65, "confirmed": True},
+        {"id": "maternity", "name": "Maternity", "total": 12, "confirmed": False},
     ],
     "rajindra": [
-        {"id": "general", "name": "General ward", "total": 1009},
-        {"id": "icu", "name": "ICU", "total": 8},
-        {"id": "maternity", "name": "Maternity", "total": 12},
+        {"id": "general", "name": "General ward", "total": 1009, "confirmed": True},
+        {"id": "icu", "name": "ICU", "total": 8, "confirmed": False},
+        {"id": "maternity", "name": "Maternity", "total": 12, "confirmed": False},
     ],
 }
 
@@ -57,9 +59,18 @@ class DoctorStatusUpdate(BaseModel):
 def build_router(db):
     async def _get_or_seed(hospital_id: str) -> dict:
         doc = await db.hospital_status.find_one({"id": hospital_id}, {"_id": 0})
+        canonical = _wards_for(hospital_id)
         if doc:
+            existing_by_id = {w["id"]: w for w in doc.get("wards", [])}
+            wards = []
+            for cw in canonical:
+                prior_available = existing_by_id.get(cw["id"], {}).get("available", cw["total"])
+                wards.append({"id": cw["id"], "name": cw["name"], "total": cw["total"], "confirmed": cw["confirmed"], "available": min(prior_available, cw["total"])})
+            if wards != doc.get("wards"):
+                await db.hospital_status.update_one({"id": hospital_id}, {"$set": {"wards": wards}})
+            doc["wards"] = wards
             return doc
-        wards = [{**w, "available": w["total"]} for w in _wards_for(hospital_id)]
+        wards = [{**w, "available": w["total"]} for w in canonical]
         doc = {"id": hospital_id, "wards": wards, "doctors": {}, "updatedAt": datetime.now(timezone.utc).isoformat()}
         await db.hospital_status.insert_one(doc)
         return {k: v for k, v in doc.items() if k != "_id"}
@@ -89,7 +100,9 @@ def build_router(db):
         return _serialize(doc)
 
     @router.post("/{hospital_id}/wards/{ward_id}/admit")
-    async def admit(hospital_id: str, ward_id: str):
+    async def admit(hospital_id: str, ward_id: str, user: dict = Depends(get_current_user)):
+        if user["hospitalId"] != hospital_id:
+            raise HTTPException(status_code=403, detail="You can only update your own hospital")
         doc = await _get_or_seed(hospital_id)
         wards = doc["wards"]
         ward = next((w for w in wards if w["id"] == ward_id), None)
@@ -100,7 +113,9 @@ def build_router(db):
         return _serialize(doc)
 
     @router.post("/{hospital_id}/wards/{ward_id}/discharge")
-    async def discharge(hospital_id: str, ward_id: str):
+    async def discharge(hospital_id: str, ward_id: str, user: dict = Depends(get_current_user)):
+        if user["hospitalId"] != hospital_id:
+            raise HTTPException(status_code=403, detail="You can only update your own hospital")
         doc = await _get_or_seed(hospital_id)
         wards = doc["wards"]
         ward = next((w for w in wards if w["id"] == ward_id), None)
@@ -111,7 +126,9 @@ def build_router(db):
         return _serialize(doc)
 
     @router.patch("/{hospital_id}/doctors/{doctor_id}")
-    async def set_doctor_status(hospital_id: str, doctor_id: str, body: DoctorStatusUpdate):
+    async def set_doctor_status(hospital_id: str, doctor_id: str, body: DoctorStatusUpdate, user: dict = Depends(get_current_user)):
+        if user["hospitalId"] != hospital_id:
+            raise HTTPException(status_code=403, detail="You can only update your own hospital")
         if body.status not in ("available", "unavailable"):
             raise HTTPException(status_code=422, detail="status must be 'available' or 'unavailable'")
         doc = await _get_or_seed(hospital_id)
