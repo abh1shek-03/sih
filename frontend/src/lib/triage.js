@@ -5,7 +5,7 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 export const toHospitalData = () => api.getHospitals().map(h => ({
   id: h.id, name: h.name, distanceKm: null, verified: h.verificationStatus === "verified",
-  icu: null, general: null, opdWaitMin: null,
+  icu: typeof h.emergency?.icuBeds === "number" ? h.emergency.icuBeds : null, general: null, opdWaitMin: null,
   doctors: h.doctors.map(d => ({ name: d.name, specialty: d.specialization, status: d.status || "unavailable" })),
 }));
 

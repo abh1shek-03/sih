@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, CircleAlert, Languages, LoaderCircle, MessageSquareText, ShieldCheck, Stethoscope } from "lucide-react";
+import { ArrowRight, CircleAlert, LoaderCircle, Languages, Mic, MessageSquareText, ShieldCheck, Square, Stethoscope, Volume2 } from "lucide-react";
 import { runTriage } from "@/lib/triage";
+import { recordMic, speakText, transcribeAudio } from "@/lib/voice";
 
 const urgencyLabel = { emergency: "Emergency", prompt: "See a doctor soon", routine: "Routine visit" };
 const urgencyStatus = { emergency: "full", prompt: "limited", routine: "available" };
@@ -13,6 +14,9 @@ export function SymptomTriage({ onOpenHospital }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const micRef = useRef(null);
 
   const submit = async (input) => {
     const value = (input ?? text).trim();
@@ -27,9 +31,36 @@ export function SymptomTriage({ onOpenHospital }) {
     } finally { setLoading(false); }
   };
 
+  const toggleMic = async () => {
+    if (recording) {
+      setRecording(false); setTranscribing(true);
+      try {
+        const blob = await micRef.current.stop();
+        const transcript = await transcribeAudio(blob);
+        setText(transcript);
+      } catch {
+        setError("Could not hear that. Please try again or type instead.");
+      } finally { setTranscribing(false); }
+      return;
+    }
+    try {
+      micRef.current = recordMic();
+      await micRef.current.start();
+      setRecording(true); setError("");
+    } catch {
+      setError("Microphone access was blocked. Please allow it or type your symptoms.");
+    }
+  };
+
   return <section className="triage-panel" data-testid="symptom-triage-panel">
-    <div className="triage-head"><MessageSquareText size={18} /><div><strong>Describe what you're feeling</strong><p>Write in Hindi, English, Punjabi, Hinglish or any Indian language. We match you with a doctor from this directory only.</p></div></div>
-    <textarea value={text} onChange={e => setText(e.target.value)} rows={3} placeholder="e.g. mujhe kal se kaan mein dard hai / My eye is red and watering" data-testid="symptom-input" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
+    <div className="triage-head"><MessageSquareText size={18} /><div><strong>Describe what you're feeling</strong><p>Write or speak in Hindi, English, Punjabi, Hinglish or any Indian language. We match you with a doctor from this directory only.</p></div></div>
+    <div className="triage-input-row">
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={3} placeholder="e.g. mujhe kal se kaan mein dard hai / My eye is red and watering" data-testid="symptom-input" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
+      <button type="button" className={`mic-button ${recording ? "recording" : ""}`} onClick={toggleMic} disabled={transcribing} data-testid="symptom-mic-button" aria-label={recording ? "Stop recording" : "Speak your symptoms"}>
+        {transcribing ? <LoaderCircle size={17} className="spin" /> : recording ? <Square size={16} /> : <Mic size={17} />}
+      </button>
+    </div>
+    {recording && <span className="mic-hint" data-testid="mic-recording-hint"><span className="live-dot" /> Listening… tap the square to stop</span>}
     <div className="triage-actions">
       <div className="triage-examples">{examples.map((ex, i) => <button key={i} type="button" onClick={() => { setText(ex); submit(ex); }} data-testid={`symptom-example-${i}`}>{ex}</button>)}</div>
       <button className="button primary" onClick={() => submit()} disabled={loading || text.trim().length < 3} data-testid="symptom-submit-button">{loading ? <><LoaderCircle size={16} className="spin" /> Matching…</> : <>Find matching doctor <ArrowRight size={16} /></>}</button>
@@ -41,11 +72,23 @@ export function SymptomTriage({ onOpenHospital }) {
 }
 
 function TriageResult({ result, onOpenHospital }) {
+  const [speaking, setSpeaking] = useState(false);
+  const listen = async () => {
+    if (speaking) return;
+    setSpeaking(true);
+    try {
+      const url = await speakText(result.responseText);
+      const audio = new Audio(url);
+      audio.onended = () => setSpeaking(false);
+      await audio.play();
+    } catch { setSpeaking(false); }
+  };
   return <div className="triage-result reveal" data-testid="triage-result">
     <div className="triage-meta">
       <span className={`status-pill ${urgencyStatus[result.urgency]}`} data-testid="triage-urgency"><span className="status-dot" />{urgencyLabel[result.urgency]}</span>
       <span className="triage-lang" data-testid="triage-language"><Languages size={13} /> {result.detectedLanguage}</span>
       {result.likelySpecialty && <span className="triage-lang" data-testid="triage-specialty"><Stethoscope size={13} /> {result.likelySpecialty}</span>}
+      <button type="button" className="listen-button" onClick={listen} disabled={speaking} data-testid="triage-listen-button">{speaking ? <LoaderCircle size={13} className="spin" /> : <Volume2 size={13} />} {speaking ? "Playing…" : "Listen"}</button>
     </div>
     <p className="triage-text" data-testid="triage-response-text">{result.responseText}</p>
     {result.clarifying_question && <div className="triage-clarify" data-testid="triage-clarifying-question"><CircleAlert size={15} /> {result.clarifying_question}</div>}

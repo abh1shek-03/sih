@@ -70,6 +70,8 @@ async def get_status_checks():
 app.include_router(api_router)
 from triage import build_router
 app.include_router(build_router(db))
+from voice import build_router as build_voice_router
+app.include_router(build_voice_router(db))
 
 app.add_middleware(
     CORSMiddleware,
