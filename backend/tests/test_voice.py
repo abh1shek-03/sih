@@ -3,7 +3,7 @@ import io
 import os
 import requests
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://care-finder-45.preview.emergentagent.com"
+BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://import-hub-143.preview.emergentagent.com"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PytestSDET/1.0)"}
 
 

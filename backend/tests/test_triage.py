@@ -3,7 +3,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://care-finder-45.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://import-hub-143.preview.emergentagent.com").rstrip("/")
 
 HEADERS = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (compatible; PytestSDET/1.0)"}
 
