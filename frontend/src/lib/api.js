@@ -6,7 +6,7 @@ const hospital = (id, name, type, area, fee, specialties, doctorCount, opd, doct
   isSeedData: true, verificationStatus: "unverified", wards: [],
   address: extra.address || null, email: extra.email || null,
   specialtiesList: extra.specialtiesList || null, bedsTotal: extra.bedsTotal ?? null,
-  emergency: extra.emergency || null,
+  emergency: extra.emergency || null, coords: extra.coords || null,
   doctors: doctors.map((d, index) => ({ id: `${id}-d${index}`, ...d, status: "unavailable" })),
 });
 
@@ -121,36 +121,36 @@ const hospitals = [
   hospital("gursharan", "Gursharan Hospital", "Multi-speciality Hospital", "Tripri", "₹200 - ₹600", 2, 2, "Open 24x7", [
     { name: "Dr. Rav Sharan", specialization: "General Physician", experience: "17 years", rating: "93% · 818 Patient Stories" },
     { name: "Dr. Dinkar Sood", specialization: "Plastic Surgeon", experience: "18 years", rating: "4.5 · 681 rated" },
-  ]),
+  ], { coords: { lat: 30.3599, lng: 76.3898, verified: false } }),
   hospital("manipal-patiala", "Manipal Hospitals, Patiala", "Multispecialty Hospital", "Patiala", "₹0 - ₹500", manipalSpecialties.length, manipalDoctors.length, "Open 24x7", manipalDoctors, {
     address: "Bhupindra Road, Near 22 No. Phatak, Patiala, Punjab – 147001", phone: "0175-500-0222", email: "info@manipalhospitals.com",
-    specialtiesList: manipalSpecialties,
+    specialtiesList: manipalSpecialties, coords: { lat: 30.34408, lng: 76.37888, verified: true },
     emergency: { available: true, phone: "0175-500-0222", icuBeds: null, notes: "24×7 Accident & Emergency Care; critical-care support available through Manipal Hospitals' emergency services." },
   }),
   hospital("park-patiala", "Park Hospital", "Multispecialty Hospital", "Urban Estate", "Not provided", parkSpecialties.length, parkDoctors.length, "OPD 9:00 AM – 8:00 PM · Emergency 24×7", parkDoctors, {
     address: "Urban Estate, Phase-1, Opp. New Bus Stand, Patiala, Punjab", phone: "+91-7448000000", email: "info@parkhospital.in",
-    specialtiesList: parkSpecialties, bedsTotal: "300+ (ICU: 65+)",
+    specialtiesList: parkSpecialties, bedsTotal: "300+ (ICU: 65+)", coords: { lat: 30.3475, lng: 76.3683, verified: false },
     emergency: { available: true, phone: "+91-7448000000", icuBeds: 65, notes: "24×7 Emergency, 24×7 Trauma Care and Critical Care available." },
   }),
-  hospital("simran-ent", "Simran ENT Centre", "Ear-Nose-Throat (ENT) Hospital", "Patiala", "₹150", 1, 1, "Open today · 8:00 AM - 8:00 PM", [{ name: "Dr. Harsimran Singh", specialization: "Ear-Nose-Throat (ENT) Specialist", experience: "20 years" }]),
-  hospital("guru-eye", "Guru Teg Bahadur Eye Hospital", "Ophthalmology (Eye Doctor) Hospital", "Patiala City", "₹100", 1, 1, "Open today · 9:00 AM - 2:00 PM", [{ name: "Dr. Ashapritpal Kaur", specialization: "Ophthalmologist", experience: "16 years" }]),
-  hospital("sanjivni", "Sanjivni Multyspeciality Hospital", "Consultant Physician Hospital", "Rajpura", "₹325", 3, 1, "Open today · 9:00 AM - 2:00 PM", [{ name: "Dr. Yogesh Arora", specialization: "Internal Medicine", experience: "31 years" }]),
-  hospital("gian-sagar", "Gian Sagar Medical College & Hospital", "Internal Medicine Hospital", "Rajpura", "₹300", 1, 1, "Open today · 9:00 AM - 4:00 PM", [{ name: "Dr. Lalit Kumar", specialization: "Internal Medicine", experience: "21 years" }]),
-  hospital("rama-atray", "Rama Atray Memorial Eye Hospital", "Ophthalmology (Eye Doctor) Hospital", "Urban Estate", "₹200", 1, 1, "Open today · 10:00 AM - 1:00 PM", [{ name: "Dr. Rajan Shonek", specialization: "Ophthalmologist", experience: "31 years", rating: "100%" }]),
-  hospital("bhatia", "Bhatia Hospital Neuro and Multispeciality", "Multispeciality Hospital", "Fateh Colony", "Not provided", 2, 1, "Open today · 10:00 AM - 2:00 PM", [{ name: "Dr. Kanwarneet Singh", specialization: "General Physician", experience: "7 years" }]),
+  hospital("simran-ent", "Simran ENT Centre", "Ear-Nose-Throat (ENT) Hospital", "Patiala", "₹150", 1, 1, "Open today · 8:00 AM - 8:00 PM", [{ name: "Dr. Harsimran Singh", specialization: "Ear-Nose-Throat (ENT) Specialist", experience: "20 years" }], { coords: { lat: 30.3398, lng: 76.3869, verified: false } }),
+  hospital("guru-eye", "Guru Teg Bahadur Eye Hospital", "Ophthalmology (Eye Doctor) Hospital", "Patiala City", "₹100", 1, 1, "Open today · 9:00 AM - 2:00 PM", [{ name: "Dr. Ashapritpal Kaur", specialization: "Ophthalmologist", experience: "16 years" }], { coords: { lat: 30.336, lng: 76.386, verified: false } }),
+  hospital("sanjivni", "Sanjivni Multyspeciality Hospital", "Consultant Physician Hospital", "Rajpura", "₹325", 3, 1, "Open today · 9:00 AM - 2:00 PM", [{ name: "Dr. Yogesh Arora", specialization: "Internal Medicine", experience: "31 years" }], { coords: { lat: 30.483, lng: 76.595, verified: false } }),
+  hospital("gian-sagar", "Gian Sagar Medical College & Hospital", "Internal Medicine Hospital", "Rajpura", "₹300", 1, 1, "Open today · 9:00 AM - 4:00 PM", [{ name: "Dr. Lalit Kumar", specialization: "Internal Medicine", experience: "21 years" }], { coords: { lat: 30.5286, lng: 76.6714, verified: true } }),
+  hospital("rama-atray", "Rama Atray Memorial Eye Hospital", "Ophthalmology (Eye Doctor) Hospital", "Urban Estate", "₹200", 1, 1, "Open today · 10:00 AM - 1:00 PM", [{ name: "Dr. Rajan Shonek", specialization: "Ophthalmologist", experience: "31 years", rating: "100%" }], { coords: { lat: 30.3475, lng: 76.3683, verified: false } }),
+  hospital("bhatia", "Bhatia Hospital Neuro and Multispeciality", "Multispeciality Hospital", "Fateh Colony", "Not provided", 2, 1, "Open today · 10:00 AM - 2:00 PM", [{ name: "Dr. Kanwarneet Singh", specialization: "General Physician", experience: "7 years" }], { coords: { lat: 30.345, lng: 76.4, verified: false } }),
   hospital("rajindra", "Rajindra Hospital", "Government Tertiary-Care Teaching Hospital", "Sangrur Road", "Government (subsidised)", rajindraSpecialties.length, rajindraDoctors.length, "Open 24x7", rajindraDoctors, {
-    address: "Sangrur Road, Patiala, Punjab – 147001", phone: "0175-221-2542",
+    address: "Sangrur Road, Patiala, Punjab – 147001", phone: "0175-221-2542", coords: { lat: 30.3291738, lng: 76.3838964, verified: true },
     specialtiesList: rajindraSpecialties, bedsTotal: "1,009 (+121 in the affiliated TB Hospital)",
     emergency: { available: true, phone: "0175-500-5515", icuBeds: null, notes: "25-bed emergency indoor facility; 3 general ambulances. Gynaecology emergency: 0175-221-3217." },
   }),
   hospital("aas-medicare", "AAS Medicare", "Multispecialty Hospital", "Yadwindra Colony", "Not provided", aasSpecialties.length, aasDoctors.length, "Open 24x7", aasDoctors, {
     address: "49, Yadwindra Colony, Opp. Main Post Office, Patiala, Punjab", phone: "+91-7889023320", email: "aasmedicarepatiala@gmail.com",
-    specialtiesList: aasSpecialties,
+    specialtiesList: aasSpecialties, coords: { lat: 30.34, lng: 76.386, verified: false },
     emergency: { available: true, icuBeds: "ICU available (bed count not publicly reported)", notes: "24×7 Emergency & Trauma Services. Covers acute medical and surgical conditions, trauma, fractures, head injuries, industrial accidents, poisoning, dengue and sports injuries." },
   }),
   hospital("patiala-heart-institute", "Patiala Heart Institute & Multispeciality Hospital", "Multispeciality Hospital", "Rattan Nagar", "Not provided", heartSpecialties.length, heartDoctors.length, "Open 24x7", heartDoctors, {
     address: "2, Jagdish Marg, Rattan Nagar, Patiala, Punjab – 147001", phone: "0175-2308030 / 0175-2308031", ambulance: "8195881234", email: "info@patialaheart.com",
-    specialtiesList: heartSpecialties,
+    specialtiesList: heartSpecialties, coords: { lat: 30.3312385, lng: 76.3829565, verified: true },
     emergency: { available: true, phone: "0175-2308030", ambulance: "8195881234", icuBeds: "Emergency ICU available", notes: "24×7 Critical Care, Emergency OT, Dialysis and ECMO available as part of emergency/critical-care facilities." },
   }),
 ];

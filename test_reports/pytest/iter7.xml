@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="0" skipped="0" tests="8" time="15.150" timestamp="2026-09-06T20:11:32.604728+00:00" hostname="agent-env-a4335634-f697-4743-af08-01444f75eebb"><testcase classname="" name="tests.test_hospital_status" time="0.000"><error message="collection failure">backend/tests/test_hospital_status.py:7: in &lt;module&gt;
+    BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen os&gt;:679: in __getitem__
+    ???
+E   KeyError: 'REACT_APP_BACKEND_URL'</error><error message="collection failure">backend/tests/test_hospital_status.py:7: in &lt;module&gt;
+    BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen os&gt;:679: in __getitem__
+    ???
+E   KeyError: 'REACT_APP_BACKEND_URL'</error></testcase><testcase classname="tests.test_triage" name="test_triage_short_input_returns_422" time="1.899" /><testcase classname="tests.test_voice" name="test_voice_speak_returns_mp3" time="1.893" /><testcase classname="tests.test_voice" name="test_voice_speak_empty_text_returns_422" time="0.111" /><testcase classname="tests.test_triage" name="test_triage_punjabi_dentist_no_match" time="12.745" /><testcase classname="tests.test_voice" name="test_voice_listen_roundtrip" time="3.576" /><testcase classname="tests.test_voice" name="test_voice_listen_empty_file_returns_400" time="0.217" /></testsuite></testsuites>

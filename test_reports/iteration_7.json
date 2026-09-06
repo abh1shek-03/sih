@@ -1,0 +1,16 @@
+{
+  "summary": "Iteration 7 final delivery sanity pass. Verified new OpenStreetMap embedded mini-map on hospital cards + light smoke checks. Backend 31/31 pytest passed (hospital status, auth for all 12 seeded accounts, triage, voice). Frontend: OSM iframe renders inside all 4 tested cards (park-patiala, manipal-patiala, rajindra, gursharan), src correctly points to openstreetmap.org/export/embed.html with marker=lat,lng, captions correctly toggle between verified/approximate based on coords.verified flag (Manipal & Rajindra show 'Pinned from the hospital's official address'; Park & Gursharan show 'Approximate pin — confirm exact entrance on arrival'). Google Maps directions link still present and functional. No regressions: specialties chips (31 for Park), emergency banner, doctor roster, staff-updated ward availability all still render around the map. Mobile 390px: no horizontal overflow (scrollWidth==clientWidth==390), iframe box 314x220px fits within viewport.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_hospital_status.py", "/app/backend/tests/test_triage.py", "/app/backend/tests/test_voice.py", "/app/test_reports/pytest/iter7.xml"],
+  "action_items": [],
+  "critical_code_review_comments": ["App.js HospitalCard JSX is on a single ~10K char line — hard to review/maintain; consider a Prettier pass or extracting HospitalCard to its own file for future iterations (not blocking delivery).", "test_hospital_status.py hard-fails collection when REACT_APP_BACKEND_URL is not exported to shell env (pytest.ini doesn't source frontend/.env). Consider loading via python-dotenv in conftest for future test runs."],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "See /app/memory/test_credentials.md (12 accounts, password MediConnect@2026). Not exercised in this iteration beyond backend login test suite which passed for all 12 accounts.",
+  "seed_data_creation": "None (backend auto-seeds 12 staff accounts + hospital status).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "OSM iframe map feature verified working end-to-end. All 12 hospitals have coords in api.js (4 verified, 8 approximate). No API keys used. Backend regression suite (31 tests) is stable — run with: REACT_APP_BACKEND_URL=<url> pytest backend/tests/ -v. This was final session delivery check per user request; no further enhancements expected.",
+  "rca of the issue": "N/A — no issues found."
+}

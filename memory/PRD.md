@@ -24,6 +24,11 @@ MediConnect — “Care that finds you.” A two-sided care directory for patien
 
 ## What's been implemented
 
+### 2026-09-06 (final) — Free OpenStreetMap embed (no API key)
+- Since the user has no Google Maps key, added a real, free, working interactive map using a plain OpenStreetMap iframe embed (`openstreetmap.org/export/embed.html`) — zero dependencies, zero API key required. Every hospital card now shows a mini-map pinned at its coordinates when expanded, with a caption distinguishing "Pinned from the hospital's official address" (verified: Manipal, Rajindra, Patiala Heart Institute, Gian Sagar) from "Approximate pin — confirm exact entrance on arrival" (the other 8, geocoded from their listed area name only). The existing "Open directions in Google Maps" link is kept alongside it, unchanged.
+- Tested via testing_agent (iteration_7.json, final delivery pass): 31/31 backend tests, OSM map renders correctly on all cards checked, verified/approximate captions toggle correctly, no regressions on specialties/doctor bios/emergency banners/ward chips, no mobile overflow.
+- Per explicit user request ("no more enhancements just give us the app now"), this closes out the feature backlog for this session — app is delivered as-is.
+
 ### 2026-09-06 (latest) — Real Staff Login (JWT) + Emergency Live Feed
 - **Real Staff Login**: replaced the fake demo "sign in" button with real email/password auth. `backend/auth.py` — bcrypt password hashing + JWT (HS256, 8h, httpOnly cookie `access_token`). One demo account auto-seeded per hospital at startup (`<hospitalId>@mediconnect.demo`, shared password `MediConnect@2026`, see `/app/memory/test_credentials.md`). Each login is scoped to exactly one hospital (user's explicit choice) — Console no longer has a hospital dropdown; `/api/hospitals/{id}/wards/*` and `/doctors/*` mutation endpoints now require auth and return 403 if a staff user tries to touch a hospital other than their own, 401 with no session.
 - **Emergency Live Feed**: `pages/Emergency.jsx` now pulls live ICU ward data (`fetchAllStatus`) for each emergency-ready hospital instead of static text, showing "ICU: X/Y available" plus a "hospital-confirmed" tag (Park Hospital's real 65-bed ICU) vs. "demo baseline" tag (all other hospitals' generic 8-bed default) — keeps the safety framing honest per the no-fabrication rule while still being "live".
