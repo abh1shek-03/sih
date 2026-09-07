@@ -7,6 +7,8 @@ const hospital = (id, name, type, area, fee, specialties, doctorCount, opd, doct
   address: extra.address || null, email: extra.email || null,
   specialtiesList: extra.specialtiesList || null, bedsTotal: extra.bedsTotal ?? null,
   emergency: extra.emergency || null, coords: extra.coords || null,
+  // photo is never bundled in the app — only real photos uploaded by that hospital's staff are shown.
+  photo: null, photoVerified: false,
   doctors: doctors.map((d, index) => ({ id: `${id}-d${index}`, ...d, status: "unavailable" })),
 });
 

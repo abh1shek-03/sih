@@ -74,8 +74,12 @@ from voice import build_router as build_voice_router
 app.include_router(build_voice_router(db))
 from hospital_status import build_router as build_hospital_status_router
 app.include_router(build_hospital_status_router(db))
-from auth import build_router as build_auth_router, seed_staff_accounts
+from hospital_photos import build_router as build_hospital_photos_router
+app.include_router(build_hospital_photos_router(db))
+from auth import build_router as build_auth_router
 app.include_router(build_auth_router(db))
+from callbacks import build_router as build_callbacks_router
+app.include_router(build_callbacks_router(db))
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,7 +98,9 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def seed_data():
-    await seed_staff_accounts(db)
+    # Staff accounts are no longer auto-seeded — each hospital's staff registers
+    # their own account via POST /api/auth/register. This keeps sign-in personal.
+    return None
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

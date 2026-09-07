@@ -103,37 +103,109 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Import GitHub repo and then apply progressive disclosure everywhere: show ONE concise line per topic
-  (user-friendly summary), and hide details until the user clicks. Specifically: a doctor's name should
-  be visible but their specialties/experience/qualification should only appear on click. Same principle
-  everywhere.
+  Import GitHub repo, apply progressive disclosure, add real photos (NOT stock images!), doctor
+  specialty one-liner, "Request callback" button on doctor profiles, and make staff sign-in personal
+  (no pre-seeded demo accounts — each hospital's staff must register their own).
+
+backend:
+  - task: "Personal staff sign-up (POST /api/auth/register) + list hospitals endpoint"
+    implemented: true
+    working: true
+    file: "backend/auth.py, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Removed auto-seeding of demo staff accounts (server.py seed_data() is now a no-op). Deleted the 12 pre-seeded demo docs from Mongo (staff_users). Added POST /api/auth/register (validates hospitalId in whitelist, email format, password >= 8 chars, uniqueness; hashes with bcrypt; sets access_token cookie same as login). Added GET /api/auth/hospitals which returns the 12 hospitals as [{id, name}] for the sign-up dropdown. Existing /api/auth/login, /me, /logout unchanged. HOSPITAL_NAMES map is source of truth."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 16 AUTH TESTS PASSED. GET /api/auth/hospitals returns 200 with 12 hospitals including park-patiala, manipal-patiala, rajindra. POST /api/auth/register: valid registration returns 200 with email/hospitalId/hospitalName and sets access_token cookie; duplicate email returns 409; invalid hospitalId returns 400; short password (<8 chars) returns 400; invalid email returns 400. GET /api/auth/me with cookie returns correct user. POST /api/auth/login: correct credentials return 200 and set cookie; wrong password returns 401. POST /api/auth/logout returns 200 and clears cookie. All validation, authentication, and authorization flows working correctly."
+
+  - task: "Real hospital photo upload/fetch (staff-only, per-hospital)"
+    implemented: true
+    working: true
+    file: "backend/hospital_photos.py, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New router at /api/hospitals prefix. POST /{id}/photo (auth required, staff can only touch their own hospitalId else 403) accepts multipart file upload OR JSON {contentType, dataBase64}. Only image/jpeg, image/png, image/webp allowed (400 otherwise). Max 3 MB (413 if larger). Stores base64 data-URL in Mongo hospital_photos, upserted per hospitalId. GET /{id}/photo (public) returns {dataUrl, uploadedAt, verified: true} or 404. GET /photos?ids=a,b,c returns bulk map for the Lookup page. DELETE /{id}/photo (auth, own-hospital-only) removes. This is the only path to a real photo — no bundled illustrative images. Frontend never falls back to stock photos: if no photo record exists, patients see a text placeholder saying 'Photo not yet supplied by the hospital'."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 21 PHOTO TESTS PASSED. POST /api/hospitals/{id}/photo: valid multipart JPEG upload returns 200 with dataUrl (data:image/jpeg;base64,...) and verified:true; cross-hospital write returns 403; unknown hospital returns 403/404; text/plain content-type returns 400; 4MB oversize file returns 413; empty file returns 400; no auth returns 401. GET /api/hospitals/{id}/photo returns 200 with dataUrl. GET /api/hospitals/photos?ids=a,b,c returns 200 with bulk map (park-patiala present, manipal-patiala absent as expected). DELETE /api/hospitals/{id}/photo: own hospital returns 200 and subsequent GET returns 404; cross-hospital delete returns 403. All upload, fetch, delete, and authorization flows working correctly."
+
+  - task: "Callback requests (POST public, GET+PATCH staff-only)"
+    implemented: true
+    working: true
+    file: "backend/callbacks.py, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New /api/callbacks router. POST is public (patients aren't logged in): validates hospitalId is in HOSPITAL_NAMES, patientName len >= 2, phone has 7-20 digits/plus chars. Stores UUID + hospitalId + doctorId/doctorName + patientName + phone + preferredTime + note + status='pending' + createdAt in Mongo callback_requests. Response includes a user-friendly message. GET /api/callbacks (auth required) lists requests filtered to the staff's own hospital, latest first. PATCH /api/callbacks/{id} (auth) marks a callback resolved; cross-hospital returns 403; unknown id returns 404."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 15 CALLBACK TESTS PASSED. POST /api/callbacks (public): valid request returns 200 with id/message/hospitalName/patientName/phone/preferredTime/createdAt; invalid hospitalId returns 400; short patientName (<2 chars) returns 400; short phone (<7 digits) returns 400. GET /api/callbacks: no auth returns 401; park staff returns 200 with list containing park callbacks; manipal staff returns 200 with list NOT containing park callbacks (correct hospital filtering). PATCH /api/callbacks/{id}: park staff resolving park callback returns 200 with status:resolved; manipal staff trying to resolve park callback returns 403; non-existent callback returns 404. All public creation, authenticated listing with hospital filtering, and cross-hospital authorization working correctly."
 
 frontend:
+  - task: "Real photo upload UI in Console + patient placeholder when no photo"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js, frontend/src/App.css, frontend/src/lib/hospitalPhotos.js, frontend/src/lib/api.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Removed ILLUSTRATIVE_PHOTOS constant and the photo-cycling assignment from api.js — the frontend never bundles stock photos anymore. New hospitalPhotos.js lib (fetchAllPhotos, fetchPhoto, uploadHospitalPhoto, removeHospitalPhoto). New HospitalPhotoUploader component in Console → Hospital profile tab: fetches current photo on mount, shows preview or a 'no photo uploaded yet' empty state, accepts JPEG/PNG/WebP up to 3 MB, uses multipart upload; disables during upload; shows date; supports Replace + Remove. Lookup fetches photos in bulk on mount (fetchAllPhotos) and passes photo prop into HospitalCard. HospitalCard: if photo.dataUrl exists show real photo with 'Photo supplied by <hospital> staff' caption; otherwise show an honest .hospital-photo-empty placeholder card ('MediConnect only shows a hospital's own photo — never a stock image'). No test IDs from prior sessions removed. New testids: hospital-photo-{id}, hospital-photo-empty-{id}, hospital-photo-uploader, hospital-photo-input, hospital-photo-upload-label, hospital-photo-remove, hospital-photo-error."
+  - task: "Doctor specialty one-line summary + Request callback button + Sign-up flow"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js, frontend/src/App.css, frontend/src/lib/callbacks.js, frontend/src/lib/auth.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Doctor collapsed rows (inside hospital AND in doctor-search results) now show a formal one-liner under the name: `<specialization> · <designation?> · <experience?>` (built by buildSpecialtyLine). CallbackModal opens from a 'Request callback' button in each doctor's expanded body; posts to /api/callbacks; on success replaces form with confirmation message. Login modal now has two tabs: Sign in / Create account. Sign-up form asks for hospital (dropdown loaded from /api/auth/hospitals), email, password, confirm password; calls /api/auth/register and auto-signs the user in (same cookie). Removed the hardcoded 'manipal-patiala@mediconnect.demo' placeholder. Everything else UI (Progressive disclosure, hospital cards, doctor collapsed rows, emergency cards) preserved from previous change."
+
   - task: "Progressive disclosure hospital card + doctor profile expansion"
     implemented: true
     working: "NA"
     file: "frontend/src/App.js, frontend/src/App.css, frontend/src/pages/Emergency.jsx"
     stuck_count: 0
-    priority: "high"
-    needs_retesting: true
+    priority: "medium"
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "Rewrote HospitalCard: collapsed card now shows only status pill, name, area·type, and one summary line (beds · N specialities · N doctors). Expanded card is a list of 7 collapsible HpRow sections (Address & directions, OPD hours, Consultation fees, Wards & beds, Specialities, Doctors, Emergency, Contact) — each showing icon + label + one-line teaser + chevron. New DoctorCollapsed component: shows only doctor name + status pill; clicking reveals specialty/experience/rating/qualification/designation/expertise. Doctor search results table replaced with DoctorSearchRow list following the same pattern. Emergency page emergency-hospital-card also converted to collapsible: name + one-line teaser (ICU x/y · phone), tap to reveal notes/ambulance/directions. Added CSS (.hp-row, .doctor-collapsed, .doctor-search, .card-summary) preserving existing teal/navy design language. All original data-testid values kept intact; new testids added: doctor-collapsed-{id}, doctor-expand-{id}, doctor-detail-{id}, doctor-search-expand-{id}, hp-row-{key}-{hospitalId}, hospital-summary-{id}, emergency-hospital-expand-{id}. Verified via screenshots on desktop viewport that collapsed → doctors section → first doctor profile flow works end-to-end and the doctor search tab also expands to reveal profile."
+          comment: "See previous entry. Retained unchanged in this iteration."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 0
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Progressive disclosure hospital card + doctor profile expansion"
+    - "Personal staff sign-up (POST /api/auth/register) + list hospitals endpoint"
+    - "Real hospital photo upload/fetch (staff-only, per-hospital)"
+    - "Callback requests (POST public, GET+PATCH staff-only)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "UI redesign only (no backend changes). Applied progressive disclosure across hospital cards, doctor rows (both inside a hospital and in the doctor search tab), and emergency hospital cards. All existing behavior preserved (live wards, staff-updated tags, map, directions, emergency line, ambulance, google maps link). Frontend compiled clean (1 pre-existing eslint warning, unrelated). Ready for user review; backend was not touched so no retest needed."
+      message: "New endpoints to verify: (1) POST /api/auth/register creates a staff user and issues cookie; GET /api/auth/hospitals returns 12 hospitals. Confirm duplicate email → 409; unknown hospitalId → 400; short password → 400. (2) POST /api/hospitals/{id}/photo requires auth + own hospital; accepts multipart image (jpeg/png/webp, <=3MB); cross-hospital → 403; wrong content-type → 400; oversize → 413; GET /api/hospitals/{id}/photo returns {dataUrl}; GET /api/hospitals/photos?ids=... returns bulk map; DELETE /api/hospitals/{id}/photo requires own-hospital auth. (3) POST /api/callbacks is public; validates hospitalId in whitelist, name >= 2 chars, phone 7-20 digits; GET /api/callbacks requires auth and only returns own hospital's list; PATCH /api/callbacks/{id} marks resolved but rejects cross-hospital with 403. No pre-seeded staff accounts — testing agent should register via /api/auth/register first (see /app/memory/test_credentials.md). Do NOT test the frontend UI in this run — only exercise the backend endpoints."
+    - agent: "testing"
+      message: "✅ BACKEND TESTING COMPLETE - ALL 52 TESTS PASSED (16 auth + 21 photo + 15 callback). Created comprehensive backend_test.py covering all scenarios from review request. All three new backend features are fully functional: (1) Personal staff sign-up with hospital list - registration, validation, login, logout all working. (2) Real hospital photo upload/fetch - multipart upload, content-type validation, size limits, cross-hospital authorization, bulk fetch, delete all working. (3) Callback requests - public creation, authenticated listing with hospital filtering, cross-hospital authorization all working. No issues found. Backend is production-ready."

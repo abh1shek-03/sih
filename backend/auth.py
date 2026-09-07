@@ -70,6 +70,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    hospitalId: str
+
+
 def build_router(db):
     @router.post("/login")
     async def login(body: LoginRequest, response: Response):
@@ -81,6 +87,38 @@ def build_router(db):
         response.set_cookie(key="access_token", value=token, httponly=True, secure=True, samesite="lax",
                              max_age=ACCESS_TOKEN_HOURS * 3600, path="/")
         return {"email": user["email"], "hospitalId": user["hospitalId"], "hospitalName": user["hospitalName"]}
+
+    @router.post("/register")
+    async def register(body: RegisterRequest, response: Response):
+        email = body.email.strip().lower()
+        hospital_id = body.hospitalId.strip()
+        if hospital_id not in HOSPITAL_NAMES:
+            raise HTTPException(status_code=400, detail="Please pick a hospital from the list")
+        if "@" not in email or "." not in email or len(email) < 5:
+            raise HTTPException(status_code=400, detail="Enter a valid email address")
+        if len(body.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        existing = await db.staff_users.find_one({"email": email})
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        user_doc = {
+            "email": email,
+            "passwordHash": hash_password(body.password),
+            "hospitalId": hospital_id,
+            "hospitalName": HOSPITAL_NAMES[hospital_id],
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "selfRegistered": True,
+        }
+        await db.staff_users.insert_one(user_doc)
+        token = create_access_token(user_doc)
+        response.set_cookie(key="access_token", value=token, httponly=True, secure=True, samesite="lax",
+                             max_age=ACCESS_TOKEN_HOURS * 3600, path="/")
+        return {"email": user_doc["email"], "hospitalId": user_doc["hospitalId"], "hospitalName": user_doc["hospitalName"]}
+
+    @router.get("/hospitals")
+    async def list_hospitals():
+        # Public — used by the sign-up modal so staff can pick their hospital
+        return [{"id": hid, "name": name} for hid, name in HOSPITAL_NAMES.items()]
 
     @router.post("/logout")
     async def logout(response: Response):

@@ -1,10 +1,12 @@
 import { useEffect, useId, useState } from "react";
 import { BrowserRouter, Link, Route, Routes, useNavigate } from "react-router-dom";
-import { Activity, Ambulance, ArrowRight, BedDouble, Check, ChevronDown, CircleAlert, Clock3, Hospital, LogIn, MapPin, Menu, MessageSquareText, Search, ShieldCheck, Stethoscope, X } from "lucide-react";
+import { Activity, Ambulance, ArrowRight, BedDouble, Check, ChevronDown, CircleAlert, Clock3, Hospital, LogIn, MapPin, Menu, MessageSquareText, Phone, Search, ShieldCheck, Stethoscope, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { getFirebaseMode } from "@/lib/firebase";
-import { login as loginApi, logout as logoutApi, me as meApi } from "@/lib/auth";
+import { listAuthHospitals, login as loginApi, logout as logoutApi, me as meApi, registerStaff as registerApi } from "@/lib/auth";
 import { admitWard, dischargeWard, fetchAllStatus, fetchStatus, setDoctorStatus } from "@/lib/hospitalStatus";
+import { fetchAllPhotos, removeHospitalPhoto, uploadHospitalPhoto } from "@/lib/hospitalPhotos";
+import { createCallbackRequest } from "@/lib/callbacks";
 import { SymptomTriage } from "@/components/SymptomTriage";
 import Emergency from "@/pages/Emergency";
 import "@/App.css";
@@ -30,17 +32,30 @@ function HpRow({ icon, label, teaser, open, onToggle, testId, accent, children }
   );
 }
 
-function DoctorCollapsed({ doc, live }) {
+function buildSpecialtyLine(doc) {
+  // A short, official-sounding one-line summary of the doctor's expertise.
+  // Prefers the formal specialization; adds experience/designation when supplied.
+  const parts = [doc.specialization];
+  if (doc.designation) parts.push(doc.designation);
+  if (doc.experience) parts.push(doc.experience);
+  return parts.filter(Boolean).join(" · ");
+}
+
+function DoctorCollapsed({ doc, live, hospital, onRequestCallback }) {
   const [open, setOpen] = useState(false);
   const docStatus = live?.doctors?.[doc.id] || "unavailable";
   const isAvail = docStatus === "available";
   const initials = doc.name.split(" ").map(x => x[0]).slice(0, 2).join("");
+  const specialtyLine = buildSpecialtyLine(doc);
   return (
     <li className={`doctor-collapsed ${open ? "open" : ""}`} data-testid={`doctor-collapsed-${doc.id}`}>
       <button type="button" className="doctor-collapsed-head" onClick={() => setOpen(!open)} data-testid={`doctor-expand-${doc.id}`} aria-expanded={open}>
         <span className="doctor-name-line">
           <span className="avatar small">{initials}</span>
-          <b>{doc.name}</b>
+          <span className="doctor-idn">
+            <b>{doc.name}</b>
+            <small className="doctor-specialty-line" data-testid={`doctor-specialty-line-${doc.id}`}>{specialtyLine}</small>
+          </span>
         </span>
         <span className="doctor-collapsed-right">
           <StatusPill status={isAvail ? "available" : "full"} label={isAvail ? "Available" : "Unavailable"} />
@@ -58,6 +73,12 @@ function DoctorCollapsed({ doc, live }) {
           {!doc.qualification && !doc.designation && !doc.expertise && (
             <p className="hp-body muted">Profile details not publicly listed by the hospital.</p>
           )}
+          <div className="doctor-actions">
+            <button type="button" className="callback-btn" onClick={() => onRequestCallback(doc, hospital)} data-testid={`request-callback-${doc.id}`}>
+              <Phone size={14} /> Request callback
+            </button>
+            <span className="doctor-actions-hint">The hospital will call you back — no need to dial.</span>
+          </div>
           <p className="hp-body muted small-note">Availability shown as unavailable until the hospital confirms it.</p>
         </div>
       )}
@@ -65,7 +86,7 @@ function DoctorCollapsed({ doc, live }) {
   );
 }
 
-function HospitalCard({ hospital, selected, onSelect, live }) {
+function HospitalCard({ hospital, selected, onSelect, live, photo, onRequestCallback }) {
   const overallStatus = live?.overallStatus || hospital.overallStatus;
   const totalAvailable = live?.wards ? live.wards.reduce((s, w) => s + w.available, 0) : null;
   const totalCapacity = live?.wards ? live.wards.reduce((s, w) => s + w.total, 0) : null;
@@ -101,6 +122,22 @@ function HospitalCard({ hospital, selected, onSelect, live }) {
       </button>
       {selected && (
         <div className="card-detail" data-testid={`hospital-detail-${hospital.id}`}>
+          {photo?.dataUrl ? (
+            <div className="hospital-photo-wrap" data-testid={`hospital-photo-${hospital.id}`}>
+              <img src={photo.dataUrl} alt={`${hospital.name} exterior — supplied by hospital staff`} className="hospital-photo" loading="lazy" />
+              <span className="photo-caption verified">Photo supplied by {hospital.name} staff</span>
+            </div>
+          ) : (
+            <div className="hospital-photo-empty" data-testid={`hospital-photo-empty-${hospital.id}`}>
+              <div className="photo-empty-inner">
+                <Hospital size={22} />
+                <div>
+                  <strong>Photo not yet supplied by the hospital</strong>
+                  <span>MediConnect only shows a hospital's own photo — never a stock image. {hospital.name} staff can upload one from the Console.</span>
+                </div>
+              </div>
+            </div>
+          )}
           <HpRow icon={<MapPin size={16} />} label="Address & directions" teaser={addressTeaser} open={openRow === "addr"} onToggle={() => toggleRow("addr")} testId={`hp-row-addr-${hospital.id}`}>
             {hospital.address && <p className="hp-body">{hospital.address}</p>}
             {hospital.coords && (
@@ -143,7 +180,7 @@ function HospitalCard({ hospital, selected, onSelect, live }) {
 
           <HpRow icon={<Stethoscope size={16} />} label={`Doctors · ${hospital.doctors.length}`} teaser="Tap a name to view the doctor's profile" open={openRow === "docs"} onToggle={() => toggleRow("docs")} testId={`hp-row-docs-${hospital.id}`}>
             <ul className="doctor-collapsed-list">
-              {hospital.doctors.map(doc => <DoctorCollapsed key={doc.id} doc={doc} live={live} />)}
+              {hospital.doctors.map(doc => <DoctorCollapsed key={doc.id} doc={doc} live={live} hospital={hospital} onRequestCallback={onRequestCallback} />)}
             </ul>
           </HpRow>
 
@@ -168,9 +205,11 @@ function HospitalCard({ hospital, selected, onSelect, live }) {
   );
 }
 
-function DoctorSearchRow({ doc }) {
+function DoctorSearchRow({ doc, hospitals, onRequestCallback }) {
   const [open, setOpen] = useState(false);
   const initials = doc.name.split(" ").map(x => x[0]).slice(0, 2).join("");
+  const specialtyLine = buildSpecialtyLine(doc);
+  const hospitalObj = hospitals.find(h => h.name === doc.hospital);
   return (
     <div className={`doctor-search ${open ? "open" : ""}`} data-testid={`doctor-result-${doc.id}`}>
       <button type="button" className="doctor-search-head" onClick={() => setOpen(!open)} aria-expanded={open} data-testid={`doctor-search-expand-${doc.id}`}>
@@ -178,7 +217,8 @@ function DoctorSearchRow({ doc }) {
           <span className="avatar">{initials}</span>
           <span className="doctor-search-idn">
             <b>{doc.name}</b>
-            <small>{doc.hospital}</small>
+            <small className="doctor-specialty-line" data-testid={`doctor-specialty-line-${doc.id}`}>{specialtyLine}</small>
+            <small className="doctor-search-hospital">{doc.hospital}</small>
           </span>
         </span>
         <span className="doctor-search-right">
@@ -194,21 +234,176 @@ function DoctorSearchRow({ doc }) {
           {doc.qualification && <div className="doc-field"><span className="doc-key">Qualification</span><span>{doc.qualification}</span></div>}
           {doc.designation && <div className="doc-field"><span className="doc-key">Designation</span><span>{doc.designation}</span></div>}
           {doc.expertise && <div className="doc-field"><span className="doc-key">Expertise</span><span>{doc.expertise}</span></div>}
+          <div className="doctor-actions">
+            <button type="button" className="callback-btn" onClick={() => onRequestCallback(doc, hospitalObj)} data-testid={`request-callback-${doc.id}`}>
+              <Phone size={14} /> Request callback
+            </button>
+            <span className="doctor-actions-hint">The hospital will call you back — no need to dial.</span>
+          </div>
           <p className="hp-body muted small-note">Availability shown as unavailable until the hospital confirms it.</p>
         </div>
       )}
     </div>
   );
 }
-function Lookup() { const [mode, setMode] = useState("hospital"); const [query, setQuery] = useState(""); const [selected, setSelected] = useState("gursharan"); const [statusMap, setStatusMap] = useState({}); const hospitals = api.getHospitals(); const doctors = api.searchDoctors(query); const filtered = hospitals.filter(h => `${h.name} ${h.location.area}`.toLowerCase().includes(query.toLowerCase())); useEffect(() => { fetchAllStatus(hospitals.map(h => h.id)).then(setStatusMap).catch(() => {}); }, []); return <main className="lookup-page page-wrap"><div className="lookup-heading"><div><p className="eyebrow">PATIENT LOOKUP <span className="demo-label">UNVERIFIED DIRECTORY</span></p><h1>Where do you need care?</h1><p className="muted intro">Search a hospital or find a specialist across Patiala.</p></div><div className="safety-note"><ShieldCheck size={17} /><span>Information is unverified.<br />Always confirm before travelling.</span></div></div><div className="search-panel"><div className="segmented"><button className={mode === "hospital" ? "active" : ""} onClick={() => setMode("hospital")} data-testid="search-by-hospital-tab"><Hospital size={16} /> By hospital</button><button className={mode === "doctor" ? "active" : ""} onClick={() => setMode("doctor")} data-testid="search-by-doctor-tab"><Stethoscope size={16} /> By doctor or specialty</button><button className={mode === "symptoms" ? "active" : ""} onClick={() => setMode("symptoms")} data-testid="search-by-symptoms-tab"><MessageSquareText size={16} /> Describe symptoms</button></div>{mode !== "symptoms" && <div className="search-input-wrap"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={mode === "hospital" ? "Search hospital or area" : "Search specialty or doctor name"} data-testid="patient-search-input" />{query && <button onClick={() => setQuery("")} data-testid="clear-search-button"><X size={16} /></button>}</div>}</div>{mode === "symptoms" ? <SymptomTriage onOpenHospital={(id) => { setSelected(id); setQuery(""); setMode("hospital"); }} /> : mode === "hospital" ? <><div className="result-bar"><span><strong>{filtered.length}</strong> hospitals in directory</span><span className="result-updated"><Clock3 size={14} /> Bed capacity updates live once staff confirm it</span></div><div className="results-grid">{filtered.map((hospital) => <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} />)}</div>{filtered.length === 0 && <div className="empty-state" data-testid="no-hospital-results">No hospitals match that search.</div>}</> : <div className="doctor-results"><div className="result-bar"><span><strong>{doctors.length}</strong> specialists across the directory</span><span className="result-updated"><Clock3 size={14} /> Tap a doctor to view their profile</span></div><div className="doctor-search-list">{doctors.map(doc => <DoctorSearchRow key={doc.id} doc={doc} />)}{doctors.length === 0 && <div className="empty-state" data-testid="no-doctor-results">No specialists match that search.</div>}</div></div>}</main>; }
+
+function CallbackModal({ context, onClose }) {
+  const [patientName, setPatientName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [preferredTime, setPreferredTime] = useState("As soon as possible");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(null);
+  const submit = async () => {
+    if (!patientName.trim() || patientName.trim().length < 2) { setError("Please enter your full name."); return; }
+    if (!phone.trim() || phone.replace(/[^0-9+]/g, "").length < 7) { setError("Please enter a valid phone number."); return; }
+    if (!context?.hospital?.id) { setError("Missing hospital reference."); return; }
+    setLoading(true); setError("");
+    try {
+      const res = await createCallbackRequest({
+        hospitalId: context.hospital.id,
+        doctorId: context.doc?.id || null,
+        doctorName: context.doc?.name || null,
+        patientName: patientName.trim(),
+        phone: phone.trim(),
+        preferredTime,
+        note: note.trim(),
+      });
+      setSuccess(res);
+    } catch (e) {
+      setError(e?.response?.data?.detail || "Couldn't send request. Please try again.");
+    } finally { setLoading(false); }
+  };
+  return (
+    <div className="modal-backdrop">
+      <div className="login-modal callback-modal" role="dialog" data-testid="callback-modal">
+        <button className="modal-close" onClick={onClose} data-testid="close-callback-modal"><X /></button>
+        <div className="modal-icon"><Phone size={22} /></div>
+        <p className="eyebrow">REQUEST CALLBACK</p>
+        <h2>{success ? "Callback requested" : (context?.doc?.name ? `Reach ${context.doc.name}` : "Ask the hospital to call you")}</h2>
+        <p className="muted">
+          {success
+            ? success.message
+            : `${context?.hospital?.name || "The hospital"} will call the number you leave here — usually within a few hours.`}
+        </p>
+        {!success && (
+          <>
+            <label>Your name<input value={patientName} onChange={e => setPatientName(e.target.value)} placeholder="e.g. Ravinder Kaur" data-testid="callback-name-input" /></label>
+            <label>Phone number<input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 98xxx xxxxx" data-testid="callback-phone-input" /></label>
+            <label>Best time to call
+              <select value={preferredTime} onChange={e => setPreferredTime(e.target.value)} data-testid="callback-time-select">
+                <option>As soon as possible</option>
+                <option>Within 2 hours</option>
+                <option>Today evening</option>
+                <option>Tomorrow morning</option>
+                <option>This weekend</option>
+              </select>
+            </label>
+            <label>Note (optional)<textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Anything the hospital should know before calling" rows={3} data-testid="callback-note-input" /></label>
+            {error && <div className="login-message login-error" data-testid="callback-error">{error}</div>}
+            <button className="button primary full" onClick={submit} disabled={loading} data-testid="callback-submit">
+              {loading ? "Sending…" : "Send request"} <ArrowRight size={16} />
+            </button>
+          </>
+        )}
+        {success && (
+          <button className="button primary full" onClick={onClose} data-testid="callback-close-success">Done</button>
+        )}
+        <span className="modal-foot"><ShieldCheck size={13} /> Your number is only shared with {context?.hospital?.name || "the hospital"}.</span>
+      </div>
+    </div>
+  );
+}
+function Lookup() {
+  const [mode, setMode] = useState("hospital");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState("gursharan");
+  const [statusMap, setStatusMap] = useState({});
+  const [photoMap, setPhotoMap] = useState({});
+  const [callbackCtx, setCallbackCtx] = useState(null);
+  const hospitals = api.getHospitals();
+  const doctors = api.searchDoctors(query);
+  const filtered = hospitals.filter(h => `${h.name} ${h.location.area}`.toLowerCase().includes(query.toLowerCase()));
+  useEffect(() => {
+    const ids = hospitals.map(h => h.id);
+    fetchAllStatus(ids).then(setStatusMap).catch(() => {});
+    fetchAllPhotos(ids).then(setPhotoMap).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const openCallback = (doc, hospital) => setCallbackCtx({ doc, hospital });
+  return (
+    <main className="lookup-page page-wrap">
+      <div className="lookup-heading">
+        <div>
+          <p className="eyebrow">PATIENT LOOKUP <span className="demo-label">UNVERIFIED DIRECTORY</span></p>
+          <h1>Where do you need care?</h1>
+          <p className="muted intro">Search a hospital or find a specialist across Patiala.</p>
+        </div>
+        <div className="safety-note">
+          <ShieldCheck size={17} /><span>Information is unverified.<br />Always confirm before travelling.</span>
+        </div>
+      </div>
+      <div className="search-panel">
+        <div className="segmented">
+          <button className={mode === "hospital" ? "active" : ""} onClick={() => setMode("hospital")} data-testid="search-by-hospital-tab"><Hospital size={16} /> By hospital</button>
+          <button className={mode === "doctor" ? "active" : ""} onClick={() => setMode("doctor")} data-testid="search-by-doctor-tab"><Stethoscope size={16} /> By doctor or specialty</button>
+          <button className={mode === "symptoms" ? "active" : ""} onClick={() => setMode("symptoms")} data-testid="search-by-symptoms-tab"><MessageSquareText size={16} /> Describe symptoms</button>
+        </div>
+        {mode !== "symptoms" && (
+          <div className="search-input-wrap">
+            <Search size={19} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={mode === "hospital" ? "Search hospital or area" : "Search specialty or doctor name"} data-testid="patient-search-input" />
+            {query && <button onClick={() => setQuery("")} data-testid="clear-search-button"><X size={16} /></button>}
+          </div>
+        )}
+      </div>
+      {mode === "symptoms" ? (
+        <SymptomTriage onOpenHospital={(id) => { setSelected(id); setQuery(""); setMode("hospital"); }} />
+      ) : mode === "hospital" ? (
+        <>
+          <div className="result-bar">
+            <span><strong>{filtered.length}</strong> hospitals in directory</span>
+            <span className="result-updated"><Clock3 size={14} /> Bed capacity updates live once staff confirm it</span>
+          </div>
+          <div className="results-grid">
+            {filtered.map((hospital) => (
+              <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} photo={photoMap[hospital.id]} onRequestCallback={openCallback} />
+            ))}
+          </div>
+          {filtered.length === 0 && <div className="empty-state" data-testid="no-hospital-results">No hospitals match that search.</div>}
+        </>
+      ) : (
+        <div className="doctor-results">
+          <div className="result-bar">
+            <span><strong>{doctors.length}</strong> specialists across the directory</span>
+            <span className="result-updated"><Clock3 size={14} /> Tap a doctor to view their profile</span>
+          </div>
+          <div className="doctor-search-list">
+            {doctors.map(doc => <DoctorSearchRow key={doc.id} doc={doc} hospitals={hospitals} onRequestCallback={openCallback} />)}
+            {doctors.length === 0 && <div className="empty-state" data-testid="no-doctor-results">No specialists match that search.</div>}
+          </div>
+        </div>
+      )}
+      {callbackCtx && <CallbackModal context={callbackCtx} onClose={() => setCallbackCtx(null)} />}
+    </main>
+  );
+}
 function Login({ onClose, onSuccess }) {
   const navigate = useNavigate();
+  const [tab, setTab] = useState("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [hospitalId, setHospitalId] = useState("");
+  const [hospitalOptions, setHospitalOptions] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const submit = async () => {
-    if (!email || !password) { setError("Enter your staff email and password."); return; }
+  useEffect(() => {
+    listAuthHospitals().then(setHospitalOptions).catch(() => setHospitalOptions([]));
+  }, []);
+  const submitSignIn = async () => {
+    if (!email || !password) { setError("Enter your email and password."); return; }
     setLoading(true); setError("");
     try {
       const user = await loginApi(email.trim(), password);
@@ -217,8 +412,130 @@ function Login({ onClose, onSuccess }) {
       setError(e?.response?.data?.detail || "Incorrect email or password.");
     } finally { setLoading(false); }
   };
-  return <div className="modal-backdrop"><div className="login-modal" role="dialog" data-testid="staff-login-modal"><button className="modal-close" onClick={onClose} data-testid="close-login-button"><X /></button><div className="modal-icon"><ShieldCheck size={22} /></div><p className="eyebrow">HOSPITAL STAFF</p><h2>Sign in to your console</h2><p className="muted">Each hospital has its own login and can only update its own beds and doctors.</p><label>Email address<input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder="manipal-patiala@mediconnect.demo" data-testid="staff-email-input" /></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder="Your password" data-testid="staff-password-input" /></label>{error && <div className="login-message login-error" data-testid="login-message">{error}</div>}<button className="button primary full" onClick={submit} disabled={loading} data-testid="staff-login-submit">{loading ? "Signing in…" : "Continue to console"} <ArrowRight size={16} /></button><span className="modal-foot"><ShieldCheck size={13} /> Role access is approved by an administrator</span></div></div>;
+  const submitSignUp = async () => {
+    if (!hospitalId) { setError("Pick your hospital from the list."); return; }
+    if (!email || !password) { setError("Enter your email and choose a password."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true); setError("");
+    try {
+      const user = await registerApi(email.trim(), password, hospitalId);
+      onSuccess(user); onClose(); navigate("/console");
+    } catch (e) {
+      setError(e?.response?.data?.detail || "Couldn't create your account. Please try again.");
+    } finally { setLoading(false); }
+  };
+  const isSignUp = tab === "signup";
+  const submit = isSignUp ? submitSignUp : submitSignIn;
+  return (
+    <div className="modal-backdrop">
+      <div className="login-modal" role="dialog" data-testid="staff-login-modal">
+        <button className="modal-close" onClick={onClose} data-testid="close-login-button"><X /></button>
+        <div className="modal-icon"><ShieldCheck size={22} /></div>
+        <p className="eyebrow">HOSPITAL STAFF</p>
+        <div className="auth-tabs">
+          <button type="button" className={!isSignUp ? "active" : ""} onClick={() => { setTab("signin"); setError(""); }} data-testid="auth-signin-tab">Sign in</button>
+          <button type="button" className={isSignUp ? "active" : ""} onClick={() => { setTab("signup"); setError(""); }} data-testid="auth-signup-tab">Create account</button>
+        </div>
+        <h2>{isSignUp ? "Create your staff account" : "Sign in to your console"}</h2>
+        <p className="muted">
+          {isSignUp
+            ? "Pick your hospital and choose your own email + password. Only you (and colleagues you tell) will know these credentials."
+            : "Use the email and password you registered with. Each hospital's staff can only update their own hospital's beds and doctors."}
+        </p>
+        {isSignUp && (
+          <label>Your hospital
+            <select value={hospitalId} onChange={e => setHospitalId(e.target.value)} data-testid="signup-hospital-select">
+              <option value="">Pick your hospital…</option>
+              {hospitalOptions.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </label>
+        )}
+        <label>Email address
+          <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder={isSignUp ? "you@yourhospital.in" : "you@yourhospital.in"} data-testid="staff-email-input" autoComplete="email" />
+        </label>
+        <label>Password
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder={isSignUp ? "At least 8 characters" : "Your password"} data-testid="staff-password-input" autoComplete={isSignUp ? "new-password" : "current-password"} />
+        </label>
+        {isSignUp && (
+          <label>Confirm password
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder="Repeat your password" data-testid="staff-confirm-input" autoComplete="new-password" />
+          </label>
+        )}
+        {error && <div className="login-message login-error" data-testid="login-message">{error}</div>}
+        <button className="button primary full" onClick={submit} disabled={loading} data-testid={isSignUp ? "staff-signup-submit" : "staff-login-submit"}>
+          {loading ? (isSignUp ? "Creating…" : "Signing in…") : (isSignUp ? "Create account & sign in" : "Continue to console")} <ArrowRight size={16} />
+        </button>
+        <span className="modal-foot"><ShieldCheck size={13} /> {isSignUp ? "Only you know these credentials — MediConnect does not create staff logins for you." : "Role access is set at registration."}</span>
+      </div>
+    </div>
+  );
 }
+function HospitalPhotoUploader({ hospitalId, hospitalName }) {
+  const [photo, setPhoto] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    fetchAllPhotos([hospitalId]).then((map) => setPhoto(map[hospitalId] || null)).catch(() => {});
+  }, [hospitalId]);
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) {
+      setError("Only JPEG, PNG or WebP images are accepted."); return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setError("Image is larger than 3 MB — please compress and try again."); return;
+    }
+    setLoading(true); setError("");
+    try {
+      const res = await uploadHospitalPhoto(hospitalId, file);
+      setPhoto({ dataUrl: res.dataUrl, uploadedAt: res.uploadedAt, verified: true });
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Couldn't upload the photo. Please try again.");
+    } finally { setLoading(false); }
+  };
+  const onRemove = async () => {
+    if (!window.confirm(`Remove the current photo of ${hospitalName}? Patients will see the "not yet supplied" placeholder again.`)) return;
+    setLoading(true); setError("");
+    try {
+      await removeHospitalPhoto(hospitalId);
+      setPhoto(null);
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Couldn't remove the photo. Please try again.");
+    } finally { setLoading(false); }
+  };
+  return (
+    <div className="profile-card photo-uploader" data-testid="hospital-photo-uploader">
+      <span className="label">Hospital photo</span>
+      <p className="muted uploader-note">MediConnect never uses stock photos. Upload a real photo of {hospitalName}'s entrance or building — patients will see this exact image on the hospital's card.</p>
+      {photo?.dataUrl ? (
+        <div className="uploader-preview">
+          <img src={photo.dataUrl} alt={`${hospitalName} exterior`} className="uploader-preview-img" />
+          <span className="photo-caption verified">Currently live · uploaded {new Date(photo.uploadedAt).toLocaleDateString()}</span>
+        </div>
+      ) : (
+        <div className="uploader-empty">
+          <Hospital size={20} />
+          <span>No photo uploaded yet. Patients see a "not yet supplied" placeholder.</span>
+        </div>
+      )}
+      <div className="uploader-actions">
+        <label className="button primary uploader-btn" data-testid="hospital-photo-upload-label">
+          {loading ? "Uploading…" : (photo?.dataUrl ? "Replace photo" : "Upload photo")}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onFile} disabled={loading} data-testid="hospital-photo-input" style={{ display: "none" }} />
+        </label>
+        {photo?.dataUrl && (
+          <button type="button" className="button text-button uploader-remove" onClick={onRemove} disabled={loading} data-testid="hospital-photo-remove">Remove</button>
+        )}
+      </div>
+      <p className="muted uploader-hint">JPEG, PNG or WebP · up to 3&nbsp;MB · a wide daylight shot of the entrance works best.</p>
+      {error && <div className="login-message login-error" data-testid="hospital-photo-error">{error}</div>}
+    </div>
+  );
+}
+
 function Console({ user, onOpenLogin, onSignOut }) {
   const [active, setActive] = useState("wards");
   const hospitals = api.getHospitals();
@@ -231,7 +548,7 @@ function Console({ user, onOpenLogin, onSignOut }) {
   const discharge = (wardId) => dischargeWard(user.hospitalId, wardId).then(setStatus);
   const toggleDoctor = (doctorId) => { const next = status?.doctors?.[doctorId] === "available" ? "unavailable" : "available"; setDoctorStatus(user.hospitalId, doctorId, next).then(setStatus); };
   if (!user) return <div className="console-gate page-wrap"><div className="gate-mark"><Hospital size={28} /></div><p className="eyebrow">HOSPITAL CONSOLE</p><h1>Keep your team<br /><em>in the know.</em></h1><p className="muted">Update the moments that matter. MediConnect derives capacity and availability automatically.</p><button className="button primary" onClick={onOpenLogin} data-testid="open-staff-login-button"><LogIn size={16} /> Staff sign in</button><div className="gate-status"><span className="demo-label">REAL LOGIN</span> {firebaseMode === "demo" ? "Each hospital signs in with its own email/password — no Firebase needed" : "Firebase connected"}</div></div>;
-  return <main className="console-page"><aside className="console-sidebar"><div className="console-hospital"><div className="hospital-avatar"><Hospital size={21} /></div><div><strong data-testid="console-hospital-name">{hospital.name}</strong><small>{user.email}</small></div></div><nav><button className={active === "wards" ? "active" : ""} onClick={() => setActive("wards")} data-testid="console-wards-tab"><BedDouble size={17} /> Ward capacity</button><button className={active === "doctors" ? "active" : ""} onClick={() => setActive("doctors")} data-testid="console-doctors-tab"><Stethoscope size={17} /> Doctor roster</button><button className={active === "profile" ? "active" : ""} onClick={() => setActive("profile")} data-testid="console-profile-tab"><Hospital size={17} /> Hospital profile</button></nav><div className="sidebar-bottom"><div className="console-live"><span className="live-dot" /><div><b>Live · saved to database</b><small>Visible to patients immediately</small></div></div><button className="sign-out" onClick={onSignOut} data-testid="staff-sign-out">Sign out</button></div></aside><section className="console-content"><div className="console-top"><div><p className="eyebrow">STAFF WORKSPACE <span className="demo-label">SIGNED IN</span></p><h1>{active === "wards" ? "Ward capacity" : active === "doctors" ? "Doctor roster" : "Hospital profile"}</h1></div><div className="last-sync"><span className="live-dot" /> {loading ? "Syncing…" : "Live updates active"}</div></div>{active === "wards" && status && <><div className="console-alert"><CircleAlert size={17} /><span><b>Availability is derived automatically.</b> Admit or discharge patients — never edit available beds directly. Changes save to MediConnect's database and appear on Patient Lookup instantly.</span></div><div className="ward-list">{status.wards.map(ward => <div className="ward-row" key={ward.id} data-testid={`ward-row-${ward.id}`}><div className="ward-identity"><span className="ward-icon">{ward.id.slice(0, 3).toUpperCase()}</span><div><h3>{ward.name}</h3><span className="muted">{ward.total} total beds{!ward.confirmed && " · demo baseline"}</span></div></div><div className="capacity-readout"><strong>{ward.available}</strong><span>available</span><StatusPill status={ward.status} /></div><div className="stepper"><button onClick={() => admit(ward.id)} data-testid={`admit-${ward.id}`} aria-label={`Admit to ${ward.name}`}>−</button><span>Occupied {ward.total - ward.available}</span><button onClick={() => discharge(ward.id)} data-testid={`discharge-${ward.id}`} aria-label={`Discharge from ${ward.name}`}>+</button></div></div>)}</div><div className="derivation-note"><Activity size={17} /><div><b>Hospital status: <span className="green-text">{statusText[status.overallStatus]}</span></b><p>Based on the lowest capacity across {status.wards.length} wards · recalculated just now</p></div></div></>}{active === "doctors" && status && <div className="roster-list">{hospital.doctors.map(doc => { const docStatus = status.doctors?.[doc.id] === "available"; return <div className="roster-row" key={doc.id} data-testid={`roster-row-${doc.id}`}><div className="roster-person"><span className="avatar">{doc.name.split(" ").map(x => x[0]).join("")}</span><div><b>{doc.name}</b><small>{doc.specialization}</small></div></div><div className="roster-status"><StatusPill status={docStatus ? "available" : "full"} label={docStatus ? "Available" : "Unavailable"} /><small>{docStatus ? "Confirmed by staff" : "Default until confirmed"}</small></div><button className="status-toggle" onClick={() => toggleDoctor(doc.id)} data-testid={`toggle-doctor-${doc.id}`}>{docStatus ? "Mark unavailable" : "Mark available"}</button></div>; })}</div>}{active === "profile" && <div className="profile-grid"><div className="profile-card"><span className="label">Hospital name</span><h3>{hospital.name}</h3><span className="muted">{hospital.type} · {hospital.location.area}</span></div><div className="profile-card"><span className="label">Services</span><div className="service-list"><span><Ambulance size={15} /> Ambulance available</span><span><CircleAlert size={15} /> 24/7 emergency services</span><span><MapPin size={15} /> {hospital.phone}</span></div></div></div>}</section></main>;
+  return <main className="console-page"><aside className="console-sidebar"><div className="console-hospital"><div className="hospital-avatar"><Hospital size={21} /></div><div><strong data-testid="console-hospital-name">{hospital.name}</strong><small>{user.email}</small></div></div><nav><button className={active === "wards" ? "active" : ""} onClick={() => setActive("wards")} data-testid="console-wards-tab"><BedDouble size={17} /> Ward capacity</button><button className={active === "doctors" ? "active" : ""} onClick={() => setActive("doctors")} data-testid="console-doctors-tab"><Stethoscope size={17} /> Doctor roster</button><button className={active === "profile" ? "active" : ""} onClick={() => setActive("profile")} data-testid="console-profile-tab"><Hospital size={17} /> Hospital profile</button></nav><div className="sidebar-bottom"><div className="console-live"><span className="live-dot" /><div><b>Live · saved to database</b><small>Visible to patients immediately</small></div></div><button className="sign-out" onClick={onSignOut} data-testid="staff-sign-out">Sign out</button></div></aside><section className="console-content"><div className="console-top"><div><p className="eyebrow">STAFF WORKSPACE <span className="demo-label">SIGNED IN</span></p><h1>{active === "wards" ? "Ward capacity" : active === "doctors" ? "Doctor roster" : "Hospital profile"}</h1></div><div className="last-sync"><span className="live-dot" /> {loading ? "Syncing…" : "Live updates active"}</div></div>{active === "wards" && status && <><div className="console-alert"><CircleAlert size={17} /><span><b>Availability is derived automatically.</b> Admit or discharge patients — never edit available beds directly. Changes save to MediConnect's database and appear on Patient Lookup instantly.</span></div><div className="ward-list">{status.wards.map(ward => <div className="ward-row" key={ward.id} data-testid={`ward-row-${ward.id}`}><div className="ward-identity"><span className="ward-icon">{ward.id.slice(0, 3).toUpperCase()}</span><div><h3>{ward.name}</h3><span className="muted">{ward.total} total beds{!ward.confirmed && " · demo baseline"}</span></div></div><div className="capacity-readout"><strong>{ward.available}</strong><span>available</span><StatusPill status={ward.status} /></div><div className="stepper"><button onClick={() => admit(ward.id)} data-testid={`admit-${ward.id}`} aria-label={`Admit to ${ward.name}`}>−</button><span>Occupied {ward.total - ward.available}</span><button onClick={() => discharge(ward.id)} data-testid={`discharge-${ward.id}`} aria-label={`Discharge from ${ward.name}`}>+</button></div></div>)}</div><div className="derivation-note"><Activity size={17} /><div><b>Hospital status: <span className="green-text">{statusText[status.overallStatus]}</span></b><p>Based on the lowest capacity across {status.wards.length} wards · recalculated just now</p></div></div></>}{active === "doctors" && status && <div className="roster-list">{hospital.doctors.map(doc => { const docStatus = status.doctors?.[doc.id] === "available"; return <div className="roster-row" key={doc.id} data-testid={`roster-row-${doc.id}`}><div className="roster-person"><span className="avatar">{doc.name.split(" ").map(x => x[0]).join("")}</span><div><b>{doc.name}</b><small>{doc.specialization}</small></div></div><div className="roster-status"><StatusPill status={docStatus ? "available" : "full"} label={docStatus ? "Available" : "Unavailable"} /><small>{docStatus ? "Confirmed by staff" : "Default until confirmed"}</small></div><button className="status-toggle" onClick={() => toggleDoctor(doc.id)} data-testid={`toggle-doctor-${doc.id}`}>{docStatus ? "Mark unavailable" : "Mark available"}</button></div>; })}</div>}{active === "profile" && <div className="profile-grid"><div className="profile-card"><span className="label">Hospital name</span><h3>{hospital.name}</h3><span className="muted">{hospital.type} · {hospital.location.area}</span></div><div className="profile-card"><span className="label">Services</span><div className="service-list"><span><Ambulance size={15} /> Ambulance available</span><span><CircleAlert size={15} /> 24/7 emergency services</span><span><MapPin size={15} /> {hospital.phone}</span></div></div><HospitalPhotoUploader hospitalId={user.hospitalId} hospitalName={hospital.name} /></div>}</section></main>;
 }
 function App() { const [loginOpen, setLoginOpen] = useState(false); const [user, setUser] = useState(undefined); useEffect(() => { meApi().then(setUser); }, []); const signOut = () => { logoutApi(); setUser(null); }; return <BrowserRouter><Shell user={user} onConsole={() => setLoginOpen(true)}><Routes><Route path="/" element={<Home />} /><Route path="/lookup" element={<Lookup />} /><Route path="/console" element={<Console user={user} onOpenLogin={() => setLoginOpen(true)} onSignOut={signOut} />} /><Route path="/emergency" element={<Emergency />} /></Routes></Shell>{loginOpen && <Login onClose={() => setLoginOpen(false)} onSuccess={setUser} />}</BrowserRouter>; }
 export default App;

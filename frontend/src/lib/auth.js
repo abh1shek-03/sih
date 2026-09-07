@@ -7,6 +7,20 @@ export const login = async (email, password) => {
   return data;
 };
 
+export const registerStaff = async (email, password, hospitalId) => {
+  const { data } = await axios.post(
+    `${API}/api/auth/register`,
+    { email, password, hospitalId },
+    { withCredentials: true }
+  );
+  return data;
+};
+
+export const listAuthHospitals = async () => {
+  const { data } = await axios.get(`${API}/api/auth/hospitals`);
+  return data;
+};
+
 export const logout = async () => {
   await axios.post(`${API}/api/auth/logout`, {}, { withCredentials: true });
 };
