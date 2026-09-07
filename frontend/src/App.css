@@ -126,6 +126,16 @@
 .verified-badge.compact{font-size:10px;padding:3px 8px;gap:3px}
 @media(max-width:760px){.hospital-name-row{font-size:22px;gap:8px}.verified-badge{font-size:10px;padding:3px 8px}}
 
+
+/* Specialty list with 2-3 line description under each name */
+.specialty-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:2px}
+.specialty-item{padding:12px 14px;border-bottom:1px solid #edf2f1;background:#fff;border-left:2px solid #b7d6d1;transition:border-color .18s,background .18s}
+.specialty-item:hover{border-left-color:var(--teal);background:#f6fbfa}
+.specialty-item:last-child{border-bottom:0}
+.specialty-item-name{display:block;font-size:13.5px;font-weight:600;color:var(--teal-dark);margin-bottom:5px;letter-spacing:.1px}
+.specialty-item-desc{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);max-width:640px}
+@media(max-width:760px){.specialty-item{padding:10px 12px}.specialty-item-desc{font-size:12px;line-height:1.5}}
+
 /* Callback CTA */
 .doctor-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:6px;padding-top:10px;border-top:1px dashed #edf2f1}
 .callback-btn{display:inline-flex;align-items:center;gap:7px;background:var(--teal);color:#fff;border:0;padding:9px 14px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;border-radius:2px;transition:background .18s,transform .18s}

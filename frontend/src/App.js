@@ -7,6 +7,7 @@ import { listAuthHospitals, login as loginApi, logout as logoutApi, me as meApi,
 import { admitWard, dischargeWard, fetchAllStatus, fetchStatus, setDoctorStatus } from "@/lib/hospitalStatus";
 import { fetchAllPhotos, fetchVerifiedMap, removeHospitalPhoto, uploadHospitalPhoto } from "@/lib/hospitalPhotos";
 import { createCallbackRequest } from "@/lib/callbacks";
+import { describeSpecialty } from "@/lib/specialtyDescriptions";
 import { SymptomTriage } from "@/components/SymptomTriage";
 import Emergency from "@/pages/Emergency";
 import "@/App.css";
@@ -184,9 +185,14 @@ function HospitalCard({ hospital, selected, onSelect, live, photo, verified, onR
 
           {specList.length > 0 && (
             <HpRow icon={<Activity size={16} />} label={`Specialities · ${specList.length}`} teaser={specTeaser} open={openRow === "spec"} onToggle={() => toggleRow("spec")} testId={`hp-row-spec-${hospital.id}`}>
-              <div className="specialty-chips">
-                {specList.map((s, i) => <span className="specialty-chip" key={i} data-testid={`specialty-chip-${hospital.id}-${i}`}>{s}</span>)}
-              </div>
+              <ul className="specialty-list">
+                {specList.map((s, i) => (
+                  <li className="specialty-item" key={i} data-testid={`specialty-item-${hospital.id}-${i}`}>
+                    <b className="specialty-item-name">{s}</b>
+                    <p className="specialty-item-desc">{describeSpecialty(s)}</p>
+                  </li>
+                ))}
+              </ul>
             </HpRow>
           )}
 
