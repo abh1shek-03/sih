@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { getFirebaseMode } from "@/lib/firebase";
 import { listAuthHospitals, login as loginApi, logout as logoutApi, me as meApi, registerStaff as registerApi } from "@/lib/auth";
 import { admitWard, dischargeWard, fetchAllStatus, fetchStatus, setDoctorStatus } from "@/lib/hospitalStatus";
-import { fetchAllPhotos, removeHospitalPhoto, uploadHospitalPhoto } from "@/lib/hospitalPhotos";
+import { fetchAllPhotos, fetchVerifiedMap, removeHospitalPhoto, uploadHospitalPhoto } from "@/lib/hospitalPhotos";
 import { createCallbackRequest } from "@/lib/callbacks";
 import { SymptomTriage } from "@/components/SymptomTriage";
 import Emergency from "@/pages/Emergency";
@@ -86,7 +86,16 @@ function DoctorCollapsed({ doc, live, hospital, onRequestCallback }) {
   );
 }
 
-function HospitalCard({ hospital, selected, onSelect, live, photo, onRequestCallback }) {
+function VerifiedBadge({ compact }) {
+  return (
+    <span className={`verified-badge ${compact ? "compact" : ""}`} data-testid="hospital-verified-badge" title="Hospital-verified: real photo uploaded and bed counts confirmed by staff">
+      <ShieldCheck size={compact ? 12 : 14} />
+      <span>Hospital-verified</span>
+    </span>
+  );
+}
+
+function HospitalCard({ hospital, selected, onSelect, live, photo, verified, onRequestCallback }) {
   const overallStatus = live?.overallStatus || hospital.overallStatus;
   const totalAvailable = live?.wards ? live.wards.reduce((s, w) => s + w.available, 0) : null;
   const totalCapacity = live?.wards ? live.wards.reduce((s, w) => s + w.total, 0) : null;
@@ -115,7 +124,10 @@ function HospitalCard({ hospital, selected, onSelect, live, photo, onRequestCall
           <StatusPill status={overallStatus} label={`${statusText[overallStatus]} capacity`} />
           <span className="verified-tag">{live?.wards ? "STAFF-UPDATED" : "UNVERIFIED DEMO"}</span>
         </div>
-        <h3>{hospital.name}</h3>
+        <h3 className="hospital-name-row">
+          <span>{hospital.name}</span>
+          {verified?.verified && <VerifiedBadge />}
+        </h3>
         <p className="muted"><MapPin size={14} /> {hospital.location.area} · {hospital.type}</p>
         <p className="card-summary" data-testid={`hospital-summary-${hospital.id}`}>{summaryLine}</p>
         <ChevronDown size={17} className={`chevron ${selected ? "rotated" : ""}`} />
@@ -321,6 +333,7 @@ function Lookup() {
   const [selected, setSelected] = useState("gursharan");
   const [statusMap, setStatusMap] = useState({});
   const [photoMap, setPhotoMap] = useState({});
+  const [verifiedMap, setVerifiedMap] = useState({});
   const [callbackCtx, setCallbackCtx] = useState(null);
   const hospitals = api.getHospitals();
   const doctors = api.searchDoctors(query);
@@ -329,6 +342,7 @@ function Lookup() {
     const ids = hospitals.map(h => h.id);
     fetchAllStatus(ids).then(setStatusMap).catch(() => {});
     fetchAllPhotos(ids).then(setPhotoMap).catch(() => {});
+    fetchVerifiedMap(ids).then(setVerifiedMap).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const openCallback = (doc, hospital) => setCallbackCtx({ doc, hospital });
@@ -368,7 +382,7 @@ function Lookup() {
           </div>
           <div className="results-grid">
             {filtered.map((hospital) => (
-              <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} photo={photoMap[hospital.id]} onRequestCallback={openCallback} />
+              <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} photo={photoMap[hospital.id]} verified={verifiedMap[hospital.id]} onRequestCallback={openCallback} />
             ))}
           </div>
           {filtered.length === 0 && <div className="empty-state" data-testid="no-hospital-results">No hospitals match that search.</div>}

@@ -7,6 +7,11 @@ export const fetchAllPhotos = async (ids) => {
   return data;
 };
 
+export const fetchVerifiedMap = async (ids) => {
+  const { data } = await axios.get(`${API}/api/hospitals/verified`, { params: { ids: (ids || []).join(",") } });
+  return data;
+};
+
 export const fetchPhoto = async (hospitalId) => {
   try {
     const { data } = await axios.get(`${API}/api/hospitals/${hospitalId}/photo`);

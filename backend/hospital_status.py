@@ -64,8 +64,11 @@ def build_router(db):
             existing_by_id = {w["id"]: w for w in doc.get("wards", [])}
             wards = []
             for cw in canonical:
-                prior_available = existing_by_id.get(cw["id"], {}).get("available", cw["total"])
-                wards.append({"id": cw["id"], "name": cw["name"], "total": cw["total"], "confirmed": cw["confirmed"], "available": min(prior_available, cw["total"])})
+                prior = existing_by_id.get(cw["id"], {})
+                prior_available = prior.get("available", cw["total"])
+                # Preserve confirmed=True once set: hospital-supplied real data OR staff has actively updated it.
+                prior_confirmed = bool(prior.get("confirmed", False)) or bool(cw["confirmed"])
+                wards.append({"id": cw["id"], "name": cw["name"], "total": cw["total"], "confirmed": prior_confirmed, "available": min(prior_available, cw["total"])})
             if wards != doc.get("wards"):
                 await db.hospital_status.update_one({"id": hospital_id}, {"$set": {"wards": wards}})
             doc["wards"] = wards
@@ -77,12 +80,33 @@ def build_router(db):
 
     def _serialize(doc: dict) -> dict:
         wards = doc["wards"]
+        staff_confirmed_bed_count = any(bool(w.get("confirmed")) for w in wards)
         return {
             "id": doc["id"],
             "wards": [{**w, "status": _ward_status(w["available"], w["total"])} for w in wards],
             "overallStatus": _overall_status(wards),
             "doctors": doc.get("doctors", {}),
+            "staffConfirmedBedCount": staff_confirmed_bed_count,
         }
+
+    @router.get("/verified")
+    async def verified_map(ids: Optional[str] = None):
+        wanted = [i.strip() for i in ids.split(",") if i.strip()] if ids else []
+        # 1) Which hospitals have a photo?
+        photo_query = {"hospitalId": {"$in": wanted}} if wanted else {}
+        photos = await db.hospital_photos.find(photo_query, {"_id": 0, "hospitalId": 1}).to_list(200)
+        has_photo = {p["hospitalId"] for p in photos}
+        # 2) Which hospitals have at least one staff-confirmed ward?
+        status_query = {"id": {"$in": wanted}} if wanted else {}
+        statuses = await db.hospital_status.find(status_query, {"_id": 0, "id": 1, "wards": 1}).to_list(200)
+        bed_confirmed = {s["id"] for s in statuses if any(bool(w.get("confirmed")) for w in s.get("wards", []))}
+        result = {}
+        target_ids = wanted if wanted else list(has_photo | bed_confirmed)
+        for hid in target_ids:
+            hp = hid in has_photo
+            bc = hid in bed_confirmed
+            result[hid] = {"hasPhoto": hp, "staffConfirmedBedCount": bc, "verified": hp and bc}
+        return result
 
     @router.get("/status")
     async def get_all_status(ids: Optional[str] = None):
@@ -109,6 +133,7 @@ def build_router(db):
         if not ward:
             raise HTTPException(status_code=404, detail="Ward not found")
         ward["available"] = min(ward["total"], ward["available"] + 1)
+        ward["confirmed"] = True
         await db.hospital_status.update_one({"id": hospital_id}, {"$set": {"wards": wards, "updatedAt": datetime.now(timezone.utc).isoformat()}})
         return _serialize(doc)
 
@@ -122,6 +147,7 @@ def build_router(db):
         if not ward:
             raise HTTPException(status_code=404, detail="Ward not found")
         ward["available"] = max(0, ward["available"] - 1)
+        ward["confirmed"] = True
         await db.hospital_status.update_one({"id": hospital_id}, {"$set": {"wards": wards, "updatedAt": datetime.now(timezone.utc).isoformat()}})
         return _serialize(doc)
 

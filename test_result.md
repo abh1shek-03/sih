@@ -108,6 +108,18 @@ user_problem_statement: |
   (no pre-seeded demo accounts — each hospital's staff must register their own).
 
 backend:
+  - task: "Hospital-verified badge endpoint + admit/discharge marks ward confirmed"
+    implemented: true
+    working: "NA"
+    file: "backend/hospital_status.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New GET /api/hospitals/verified?ids=a,b,c returns {hospitalId: {hasPhoto, staffConfirmedBedCount, verified}} where verified = hasPhoto && staffConfirmedBedCount. hasPhoto is looked up in hospital_photos; staffConfirmedBedCount is true if any ward in the hospital's status doc has confirmed=true. admit/discharge now flip the touched ward's confirmed field to true (was previously always false for the generic template hospitals). _get_or_seed now preserves confirmed=true across reads instead of resetting it from the canonical template. Existing /status responses now also include staffConfirmedBedCount for convenience."
+
   - task: "Personal staff sign-up (POST /api/auth/register) + list hospitals endpoint"
     implemented: true
     working: true
@@ -197,15 +209,13 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Personal staff sign-up (POST /api/auth/register) + list hospitals endpoint"
-    - "Real hospital photo upload/fetch (staff-only, per-hospital)"
-    - "Callback requests (POST public, GET+PATCH staff-only)"
+    - "Hospital-verified badge endpoint + admit/discharge marks ward confirmed"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "New endpoints to verify: (1) POST /api/auth/register creates a staff user and issues cookie; GET /api/auth/hospitals returns 12 hospitals. Confirm duplicate email → 409; unknown hospitalId → 400; short password → 400. (2) POST /api/hospitals/{id}/photo requires auth + own hospital; accepts multipart image (jpeg/png/webp, <=3MB); cross-hospital → 403; wrong content-type → 400; oversize → 413; GET /api/hospitals/{id}/photo returns {dataUrl}; GET /api/hospitals/photos?ids=... returns bulk map; DELETE /api/hospitals/{id}/photo requires own-hospital auth. (3) POST /api/callbacks is public; validates hospitalId in whitelist, name >= 2 chars, phone 7-20 digits; GET /api/callbacks requires auth and only returns own hospital's list; PATCH /api/callbacks/{id} marks resolved but rejects cross-hospital with 403. No pre-seeded staff accounts — testing agent should register via /api/auth/register first (see /app/memory/test_credentials.md). Do NOT test the frontend UI in this run — only exercise the backend endpoints."
+      message: "Please test ONLY the new verified-badge feature. (1) GET /api/hospitals/verified?ids=park-patiala,manipal-patiala,rajindra returns 200 dict of {hasPhoto, staffConfirmedBedCount, verified}. Without any photos uploaded and no admit/discharge activity, park-patiala should show hasPhoto=false, staffConfirmedBedCount=true (Park's ICU + general beds are hospital-supplied real data seeded as confirmed=true), verified=false; rajindra should show hasPhoto=false, staffConfirmedBedCount=true (rajindra general ward seed), verified=false; manipal-patiala should show all three false. (2) Register a park-patiala staff account, upload a valid tiny JPEG (POST /api/hospitals/park-patiala/photo), then GET /api/hospitals/verified?ids=park-patiala → verified should now be true. (3) Register a manipal-patiala staff, call POST /api/hospitals/manipal-patiala/wards/general/admit once → GET /api/hospitals/manipal-patiala/status wards[general].confirmed should now be true AND staffConfirmedBedCount=true; upload a photo → verified=true. (4) Assert repeated GET /api/hospitals/manipal-patiala/status still returns the ward's confirmed=true after several calls (regression check on _get_or_seed preserving the flag). Do not test any other endpoints; do not test the frontend."
     - agent: "testing"
       message: "✅ BACKEND TESTING COMPLETE - ALL 52 TESTS PASSED (16 auth + 21 photo + 15 callback). Created comprehensive backend_test.py covering all scenarios from review request. All three new backend features are fully functional: (1) Personal staff sign-up with hospital list - registration, validation, login, logout all working. (2) Real hospital photo upload/fetch - multipart upload, content-type validation, size limits, cross-hospital authorization, bulk fetch, delete all working. (3) Callback requests - public creation, authenticated listing with hospital filtering, cross-hospital authorization all working. No issues found. Backend is production-ready."
