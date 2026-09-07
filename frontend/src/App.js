@@ -14,13 +14,193 @@ const statusText = { available: "Available", limited: "Limited", full: "Full", u
 function StatusPill({ status, label }) { const id = useId().replace(/:/g, ""); return <span data-testid={`status-pill-${status}-${id}`} className={`status-pill ${status}`}><span className="status-dot" />{label || statusText[status]}</span>; }
 function Shell({ user, onConsole, children }) { const [open, setOpen] = useState(false); const navigate = useNavigate(); return <div className="app-shell"><header className="topbar"><Link to="/" className="brand" data-testid="brand-home-link"><span className="brand-mark"><Activity size={18} /></span><span>Medi<span>Connect</span></span></Link><button className="mobile-menu" onClick={() => setOpen(!open)} data-testid="mobile-menu-button"><Menu size={20} /></button><nav className={open ? "nav open" : "nav"} data-testid="main-navigation"><Link to="/lookup" data-testid="nav-patient-lookup">Patient lookup</Link><Link to="/console" data-testid="nav-hospital-console">Hospital console</Link><button className="nav-login" onClick={() => user ? navigate("/console") : onConsole()} data-testid="nav-staff-login"><LogIn size={15} /> {user ? user.hospitalName : "Staff sign in"}</button></nav></header>{children}<footer className="footer"><span>MediConnect</span><span>Care that finds you.</span><span className="demo-foot"><span className="live-dot" /> Demo data · unverified</span></footer></div>; }
 function Home() { const navigate = useNavigate(); const hospitals = api.getHospitals(); const doctorTotal = hospitals.reduce((sum, h) => sum + h.doctors.length, 0); return <main className="home-page page-wrap"><section className="home-hero"><div className="hero-copy reveal"><p className="eyebrow"><span className="live-dot" /> Patiala care directory</p><h1>Find the right care<br /><em>before you go.</em></h1><p className="hero-lead">Compare hospitals, specialists, consultation fees, OPD hours, and directions from one calm view.</p><div className="hero-actions"><button className="button primary" onClick={() => navigate("/lookup")} data-testid="hero-find-care-button">Find care near you <ArrowRight size={17} /></button><button className="button text-button" onClick={() => navigate("/console")} data-testid="hero-staff-console-button">For hospital staff <span>↗</span></button></div></div><div className="hero-board reveal delay-1"><div className="board-head"><span>PATIALA DIRECTORY</span><span>{hospitals.length} hospitals listed</span></div><div className="signal"><div className="signal-icon"><Hospital size={26} /></div><div><strong>Hospital information, together</strong><p>Doctor profiles and timings from your supplied directory data</p></div><Check className="signal-check" size={18} /></div><div className="mini-stats"><div><strong>{hospitals.length}</strong><span>Hospitals</span></div><div><strong>{doctorTotal}+</strong><span>Doctors listed</span></div><div><strong>24/7</strong><span>Open hospitals</span></div></div><div className="board-note"><ShieldCheck size={15} /><span>Records are clearly marked unverified; availability stays unavailable until staff confirm it.</span></div></div></section><section className="home-strip"><div><span className="strip-number">01</span><strong>Search by hospital</strong><p>Compare care, fees, and OPD timings.</p></div><div><span className="strip-number">02</span><strong>Compare specialists</strong><p>Find doctors across every hospital.</p></div><div><span className="strip-number">03</span><strong>Choose with clarity</strong><p>Open directions before you travel.</p></div></section></main>; }
+function HpRow({ icon, label, teaser, open, onToggle, testId, accent, children }) {
+  return (
+    <div className={`hp-row ${open ? "open" : ""} ${accent || ""}`} data-testid={testId}>
+      <button type="button" className="hp-row-head" onClick={onToggle} aria-expanded={open}>
+        <span className="hp-row-icon">{icon}</span>
+        <span className="hp-row-text">
+          <span className="hp-row-label">{label}</span>
+          <span className="hp-row-teaser">{teaser}</span>
+        </span>
+        <ChevronDown size={16} className={`chevron-inline ${open ? "rotated" : ""}`} />
+      </button>
+      {open && <div className="hp-row-body">{children}</div>}
+    </div>
+  );
+}
+
+function DoctorCollapsed({ doc, live }) {
+  const [open, setOpen] = useState(false);
+  const docStatus = live?.doctors?.[doc.id] || "unavailable";
+  const isAvail = docStatus === "available";
+  const initials = doc.name.split(" ").map(x => x[0]).slice(0, 2).join("");
+  return (
+    <li className={`doctor-collapsed ${open ? "open" : ""}`} data-testid={`doctor-collapsed-${doc.id}`}>
+      <button type="button" className="doctor-collapsed-head" onClick={() => setOpen(!open)} data-testid={`doctor-expand-${doc.id}`} aria-expanded={open}>
+        <span className="doctor-name-line">
+          <span className="avatar small">{initials}</span>
+          <b>{doc.name}</b>
+        </span>
+        <span className="doctor-collapsed-right">
+          <StatusPill status={isAvail ? "available" : "full"} label={isAvail ? "Available" : "Unavailable"} />
+          <ChevronDown size={15} className={`chevron-inline ${open ? "rotated" : ""}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="doctor-collapsed-body" data-testid={`doctor-detail-${doc.id}`}>
+          <div className="doc-field"><span className="doc-key">Specialty</span><span>{doc.specialization}</span></div>
+          {doc.experience && <div className="doc-field"><span className="doc-key">Experience</span><span>{doc.experience}</span></div>}
+          {doc.rating && <div className="doc-field"><span className="doc-key">Rating</span><span>{doc.rating}</span></div>}
+          {doc.qualification && <div className="doc-field"><span className="doc-key">Qualification</span><span>{doc.qualification}</span></div>}
+          {doc.designation && <div className="doc-field"><span className="doc-key">Designation</span><span>{doc.designation}</span></div>}
+          {doc.expertise && <div className="doc-field"><span className="doc-key">Expertise</span><span>{doc.expertise}</span></div>}
+          {!doc.qualification && !doc.designation && !doc.expertise && (
+            <p className="hp-body muted">Profile details not publicly listed by the hospital.</p>
+          )}
+          <p className="hp-body muted small-note">Availability shown as unavailable until the hospital confirms it.</p>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function HospitalCard({ hospital, selected, onSelect, live }) {
   const overallStatus = live?.overallStatus || hospital.overallStatus;
   const totalAvailable = live?.wards ? live.wards.reduce((s, w) => s + w.available, 0) : null;
   const totalCapacity = live?.wards ? live.wards.reduce((s, w) => s + w.total, 0) : null;
-  return <article className={`hospital-card ${selected ? "selected" : ""}`} data-testid={`hospital-card-${hospital.id}`}><button className="card-main" onClick={() => onSelect(hospital.id)} data-testid={`hospital-expand-${hospital.id}`}><div className="card-top"><StatusPill status={overallStatus} label={`${statusText[overallStatus]} capacity`} /><span className="verified-tag">{live?.wards ? "STAFF-UPDATED" : "UNVERIFIED DEMO"}</span></div><h3>{hospital.name}</h3><p className="muted"><MapPin size={14} /> {hospital.location.area} · {hospital.type}</p><p className="hospital-meta">{hospital.consultationFees} consultation · {hospital.specialtyCount} specialit{hospital.specialtyCount === 1 ? "y" : "ies"} · {hospital.doctorCount} doctors · {hospital.opd}</p><div className="card-metrics"><span><BedDouble size={15} /><b>{live?.wards ? `${totalAvailable}/${totalCapacity}` : (hospital.bedsTotal || "Not reported")}</b> {live?.wards ? "beds available" : (hospital.bedsTotal ? "total beds" : "capacity")}</span><span><Stethoscope size={15} /><b>{hospital.doctorCount}</b> doctors</span><span><Ambulance size={15} />{hospital.phone && hospital.phone !== "Hospital contact pending verification" ? hospital.phone : "Contact pending"}</span></div><ChevronDown size={17} className={`chevron ${selected ? "rotated" : ""}`} /></button>{selected && <div className="card-detail" data-testid={`hospital-detail-${hospital.id}`}>{live?.wards ? <div className="detail-line" data-testid={`hospital-ward-availability-${hospital.id}`}><span>Ward availability · staff-updated</span><div className="ward-mini-list">{live.wards.map(w => <span key={w.id} className={`ward-mini ${w.status}`}>{w.name}: {w.available}/{w.total}</span>)}</div></div> : <div className="detail-line"><span>Ward availability</span><strong className="not-reported">Not reported by hospital staff</strong></div>}<div className="detail-row"><div><span className="label">OPD hours</span><strong>{hospital.opd}</strong></div><div><span className="label">Consultation fees</span><strong>{hospital.consultationFees}</strong></div>{hospital.address && <div><span className="label">Address</span><strong>{hospital.address}</strong></div>}{hospital.email && <div><span className="label">Email</span><strong>{hospital.email}</strong></div>}</div>{hospital.emergency?.available && <div className="emergency-inline" data-testid={`hospital-emergency-info-${hospital.id}`}><CircleAlert size={14} /><span><b>Emergency-ready:</b> {hospital.emergency.notes}{hospital.emergency.phone && ` · Emergency line: ${hospital.emergency.phone}`}{hospital.emergency.ambulance && ` · Ambulance: ${hospital.emergency.ambulance}`}</span></div>}{hospital.specialtiesList && <div className="detail-specialties"><span className="label">Specialties · {hospital.specialtiesList.length}</span><div className="specialty-chips">{hospital.specialtiesList.map((s, i) => <span className="specialty-chip" key={i} data-testid={`specialty-chip-${hospital.id}-${i}`}>{s}</span>)}</div></div>}{hospital.coords && <div className="mini-map-wrap" data-testid={`hospital-map-${hospital.id}`}><iframe title={`Map of ${hospital.name}`} className="mini-map" loading="lazy" src={`https://www.openstreetmap.org/export/embed.html?bbox=${hospital.coords.lng - 0.008}%2C${hospital.coords.lat - 0.005}%2C${hospital.coords.lng + 0.008}%2C${hospital.coords.lat + 0.005}&layer=mapnik&marker=${hospital.coords.lat}%2C${hospital.coords.lng}`} /><span className="map-caption">{hospital.coords.verified ? "Pinned from the hospital's official address" : "Approximate pin — confirm exact entrance on arrival"}</span></div>}<div className="detail-doctors"><span className="label">Doctor roster · status unavailable until staff confirmation</span>{hospital.doctors.map((doc) => { const docStatus = live?.doctors?.[doc.id] || "unavailable"; return <div className="doctor-row" key={doc.id}><span>{doc.name}<small>{doc.specialization}{doc.experience ? ` · ${doc.experience}` : ""}{doc.rating ? ` · ${doc.rating}` : ""}</small>{(doc.qualification || doc.designation || doc.expertise) && <small className="doctor-bio">{[doc.qualification, doc.designation].filter(Boolean).join(" · ") || "Profile details not publicly listed by the hospital"}{doc.expertise ? ` — ${doc.expertise}` : ""}</small>}</span><StatusPill status={docStatus === "available" ? "available" : "full"} label={docStatus === "available" ? "Available" : "Unavailable"} /></div>; })}</div><a className="directions-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hospital.name + " " + hospital.location.area + " Patiala")}`} target="_blank" rel="noreferrer" data-testid={`hospital-directions-${hospital.id}`}><MapPin size={15} /> Open directions in Google Maps <ArrowRight size={15} /></a></div>}</article>;
+  const bedsSummary = live?.wards
+    ? `${totalAvailable}/${totalCapacity} beds available`
+    : (hospital.bedsTotal ? `${hospital.bedsTotal} total beds` : "Beds not reported");
+  const specialtyCount = hospital.specialtiesList?.length || hospital.specialtyCount;
+  const summaryLine = `${bedsSummary} · ${specialtyCount} specialit${specialtyCount === 1 ? "y" : "ies"} · ${hospital.doctorCount} doctors`;
+  const [openRow, setOpenRow] = useState(null);
+  const toggleRow = (k) => setOpenRow(openRow === k ? null : k);
+  const specList = hospital.specialtiesList || [];
+  const specTeaser = specList.length
+    ? (specList.length > 3 ? `${specList.slice(0, 3).join(", ")} · +${specList.length - 3} more` : specList.join(", "))
+    : "Not reported";
+  const emergencyTeaser = hospital.emergency?.available
+    ? `Emergency-ready${hospital.emergency.phone ? ` · ${hospital.emergency.phone}` : ""}`
+    : "Not emergency-ready";
+  const contactTeaser = (hospital.phone && hospital.phone !== "Hospital contact pending verification")
+    ? hospital.phone
+    : "Contact pending verification";
+  const addressTeaser = hospital.address || `${hospital.location.area}, Patiala`;
+  return (
+    <article className={`hospital-card ${selected ? "selected" : ""}`} data-testid={`hospital-card-${hospital.id}`}>
+      <button type="button" className="card-main compact" onClick={() => onSelect(hospital.id)} data-testid={`hospital-expand-${hospital.id}`}>
+        <div className="card-top">
+          <StatusPill status={overallStatus} label={`${statusText[overallStatus]} capacity`} />
+          <span className="verified-tag">{live?.wards ? "STAFF-UPDATED" : "UNVERIFIED DEMO"}</span>
+        </div>
+        <h3>{hospital.name}</h3>
+        <p className="muted"><MapPin size={14} /> {hospital.location.area} · {hospital.type}</p>
+        <p className="card-summary" data-testid={`hospital-summary-${hospital.id}`}>{summaryLine}</p>
+        <ChevronDown size={17} className={`chevron ${selected ? "rotated" : ""}`} />
+      </button>
+      {selected && (
+        <div className="card-detail" data-testid={`hospital-detail-${hospital.id}`}>
+          <HpRow icon={<MapPin size={16} />} label="Address & directions" teaser={addressTeaser} open={openRow === "addr"} onToggle={() => toggleRow("addr")} testId={`hp-row-addr-${hospital.id}`}>
+            {hospital.address && <p className="hp-body">{hospital.address}</p>}
+            {hospital.coords && (
+              <div className="mini-map-wrap" data-testid={`hospital-map-${hospital.id}`}>
+                <iframe title={`Map of ${hospital.name}`} className="mini-map" loading="lazy" src={`https://www.openstreetmap.org/export/embed.html?bbox=${hospital.coords.lng - 0.008}%2C${hospital.coords.lat - 0.005}%2C${hospital.coords.lng + 0.008}%2C${hospital.coords.lat + 0.005}&layer=mapnik&marker=${hospital.coords.lat}%2C${hospital.coords.lng}`} />
+                <span className="map-caption">{hospital.coords.verified ? "Pinned from the hospital's official address" : "Approximate pin — confirm exact entrance on arrival"}</span>
+              </div>
+            )}
+            <a className="directions-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hospital.name + " " + hospital.location.area + " Patiala")}`} target="_blank" rel="noreferrer" data-testid={`hospital-directions-${hospital.id}`}>
+              <MapPin size={15} /> Open directions in Google Maps <ArrowRight size={15} />
+            </a>
+          </HpRow>
+
+          <HpRow icon={<Clock3 size={16} />} label="OPD hours" teaser={hospital.opd} open={openRow === "opd"} onToggle={() => toggleRow("opd")} testId={`hp-row-opd-${hospital.id}`}>
+            <p className="hp-body">{hospital.opd}</p>
+          </HpRow>
+
+          <HpRow icon={<span className="hp-currency">₹</span>} label="Consultation fees" teaser={hospital.consultationFees} open={openRow === "fees"} onToggle={() => toggleRow("fees")} testId={`hp-row-fees-${hospital.id}`}>
+            <p className="hp-body">{hospital.consultationFees}</p>
+            {hospital.email && <p className="hp-body muted">Billing queries: {hospital.email}</p>}
+          </HpRow>
+
+          <HpRow icon={<BedDouble size={16} />} label="Wards & beds" teaser={bedsSummary} open={openRow === "beds"} onToggle={() => toggleRow("beds")} testId={`hp-row-beds-${hospital.id}`}>
+            {live?.wards ? (
+              <div className="ward-mini-list" data-testid={`hospital-ward-availability-${hospital.id}`}>
+                {live.wards.map(w => <span key={w.id} className={`ward-mini ${w.status}`}>{w.name}: {w.available}/{w.total}</span>)}
+              </div>
+            ) : (
+              <p className="hp-body not-reported">Not reported by hospital staff.</p>
+            )}
+          </HpRow>
+
+          {specList.length > 0 && (
+            <HpRow icon={<Activity size={16} />} label={`Specialities · ${specList.length}`} teaser={specTeaser} open={openRow === "spec"} onToggle={() => toggleRow("spec")} testId={`hp-row-spec-${hospital.id}`}>
+              <div className="specialty-chips">
+                {specList.map((s, i) => <span className="specialty-chip" key={i} data-testid={`specialty-chip-${hospital.id}-${i}`}>{s}</span>)}
+              </div>
+            </HpRow>
+          )}
+
+          <HpRow icon={<Stethoscope size={16} />} label={`Doctors · ${hospital.doctors.length}`} teaser="Tap a name to view the doctor's profile" open={openRow === "docs"} onToggle={() => toggleRow("docs")} testId={`hp-row-docs-${hospital.id}`}>
+            <ul className="doctor-collapsed-list">
+              {hospital.doctors.map(doc => <DoctorCollapsed key={doc.id} doc={doc} live={live} />)}
+            </ul>
+          </HpRow>
+
+          {hospital.emergency?.available && (
+            <HpRow icon={<CircleAlert size={16} />} label="Emergency" teaser={emergencyTeaser} open={openRow === "er"} onToggle={() => toggleRow("er")} testId={`hp-row-er-${hospital.id}`} accent="warn">
+              <div data-testid={`hospital-emergency-info-${hospital.id}`}>
+                <p className="hp-body">{hospital.emergency.notes}</p>
+                {hospital.emergency.phone && <p className="hp-body"><b>Emergency line:</b> {hospital.emergency.phone}</p>}
+                {hospital.emergency.ambulance && <p className="hp-body"><b>Ambulance:</b> {hospital.emergency.ambulance}</p>}
+              </div>
+            </HpRow>
+          )}
+
+          <HpRow icon={<Ambulance size={16} />} label="Contact" teaser={contactTeaser} open={openRow === "contact"} onToggle={() => toggleRow("contact")} testId={`hp-row-contact-${hospital.id}`}>
+            {hospital.phone && <p className="hp-body"><b>Phone:</b> {hospital.phone}</p>}
+            {hospital.email && <p className="hp-body"><b>Email:</b> {hospital.email}</p>}
+            {!hospital.phone && !hospital.email && <p className="hp-body muted">Contact information pending verification.</p>}
+          </HpRow>
+        </div>
+      )}
+    </article>
+  );
 }
-function Lookup() { const [mode, setMode] = useState("hospital"); const [query, setQuery] = useState(""); const [selected, setSelected] = useState("gursharan"); const [statusMap, setStatusMap] = useState({}); const hospitals = api.getHospitals(); const doctors = api.searchDoctors(query); const filtered = hospitals.filter(h => `${h.name} ${h.location.area}`.toLowerCase().includes(query.toLowerCase())); useEffect(() => { fetchAllStatus(hospitals.map(h => h.id)).then(setStatusMap).catch(() => {}); }, []); return <main className="lookup-page page-wrap"><div className="lookup-heading"><div><p className="eyebrow">PATIENT LOOKUP <span className="demo-label">UNVERIFIED DIRECTORY</span></p><h1>Where do you need care?</h1><p className="muted intro">Search a hospital or find a specialist across Patiala.</p></div><div className="safety-note"><ShieldCheck size={17} /><span>Information is unverified.<br />Always confirm before travelling.</span></div></div><div className="search-panel"><div className="segmented"><button className={mode === "hospital" ? "active" : ""} onClick={() => setMode("hospital")} data-testid="search-by-hospital-tab"><Hospital size={16} /> By hospital</button><button className={mode === "doctor" ? "active" : ""} onClick={() => setMode("doctor")} data-testid="search-by-doctor-tab"><Stethoscope size={16} /> By doctor or specialty</button><button className={mode === "symptoms" ? "active" : ""} onClick={() => setMode("symptoms")} data-testid="search-by-symptoms-tab"><MessageSquareText size={16} /> Describe symptoms</button></div>{mode !== "symptoms" && <div className="search-input-wrap"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={mode === "hospital" ? "Search hospital or area" : "Search specialty or doctor name"} data-testid="patient-search-input" />{query && <button onClick={() => setQuery("")} data-testid="clear-search-button"><X size={16} /></button>}</div>}</div>{mode === "symptoms" ? <SymptomTriage onOpenHospital={(id) => { setSelected(id); setQuery(""); setMode("hospital"); }} /> : mode === "hospital" ? <><div className="result-bar"><span><strong>{filtered.length}</strong> hospitals in directory</span><span className="result-updated"><Clock3 size={14} /> Bed capacity updates live once staff confirm it</span></div><div className="results-grid">{filtered.map((hospital) => <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} />)}</div>{filtered.length === 0 && <div className="empty-state" data-testid="no-hospital-results">No hospitals match that search.</div>}</> : <div className="doctor-results"><div className="result-bar"><span><strong>{doctors.length}</strong> specialists across the directory</span><span className="result-updated"><Clock3 size={14} /> Doctor status unavailable until staff confirmation</span></div><div className="doctor-table"><div className="table-head"><span>Doctor</span><span>Specialty</span><span>Hospital</span><span>Current status</span></div>{doctors.map(doc => <div className="table-row" key={doc.id} data-testid={`doctor-result-${doc.id}`}><span className="doctor-name"><span className="avatar">{doc.name.split(" ").map(x => x[0]).join("")}</span><b>{doc.name}</b></span><span>{doc.specialization}</span><span>{doc.hospital}</span><span><StatusPill status="full" label="Unavailable" /><small>Default until confirmed</small></span></div>)}</div></div>}</main>; }
+
+function DoctorSearchRow({ doc }) {
+  const [open, setOpen] = useState(false);
+  const initials = doc.name.split(" ").map(x => x[0]).slice(0, 2).join("");
+  return (
+    <div className={`doctor-search ${open ? "open" : ""}`} data-testid={`doctor-result-${doc.id}`}>
+      <button type="button" className="doctor-search-head" onClick={() => setOpen(!open)} aria-expanded={open} data-testid={`doctor-search-expand-${doc.id}`}>
+        <span className="doctor-name-line">
+          <span className="avatar">{initials}</span>
+          <span className="doctor-search-idn">
+            <b>{doc.name}</b>
+            <small>{doc.hospital}</small>
+          </span>
+        </span>
+        <span className="doctor-search-right">
+          <StatusPill status="full" label="Unavailable" />
+          <ChevronDown size={15} className={`chevron-inline ${open ? "rotated" : ""}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="doctor-search-body" data-testid={`doctor-search-detail-${doc.id}`}>
+          <div className="doc-field"><span className="doc-key">Specialty</span><span>{doc.specialization}</span></div>
+          {doc.experience && <div className="doc-field"><span className="doc-key">Experience</span><span>{doc.experience}</span></div>}
+          {doc.rating && <div className="doc-field"><span className="doc-key">Rating</span><span>{doc.rating}</span></div>}
+          {doc.qualification && <div className="doc-field"><span className="doc-key">Qualification</span><span>{doc.qualification}</span></div>}
+          {doc.designation && <div className="doc-field"><span className="doc-key">Designation</span><span>{doc.designation}</span></div>}
+          {doc.expertise && <div className="doc-field"><span className="doc-key">Expertise</span><span>{doc.expertise}</span></div>}
+          <p className="hp-body muted small-note">Availability shown as unavailable until the hospital confirms it.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+function Lookup() { const [mode, setMode] = useState("hospital"); const [query, setQuery] = useState(""); const [selected, setSelected] = useState("gursharan"); const [statusMap, setStatusMap] = useState({}); const hospitals = api.getHospitals(); const doctors = api.searchDoctors(query); const filtered = hospitals.filter(h => `${h.name} ${h.location.area}`.toLowerCase().includes(query.toLowerCase())); useEffect(() => { fetchAllStatus(hospitals.map(h => h.id)).then(setStatusMap).catch(() => {}); }, []); return <main className="lookup-page page-wrap"><div className="lookup-heading"><div><p className="eyebrow">PATIENT LOOKUP <span className="demo-label">UNVERIFIED DIRECTORY</span></p><h1>Where do you need care?</h1><p className="muted intro">Search a hospital or find a specialist across Patiala.</p></div><div className="safety-note"><ShieldCheck size={17} /><span>Information is unverified.<br />Always confirm before travelling.</span></div></div><div className="search-panel"><div className="segmented"><button className={mode === "hospital" ? "active" : ""} onClick={() => setMode("hospital")} data-testid="search-by-hospital-tab"><Hospital size={16} /> By hospital</button><button className={mode === "doctor" ? "active" : ""} onClick={() => setMode("doctor")} data-testid="search-by-doctor-tab"><Stethoscope size={16} /> By doctor or specialty</button><button className={mode === "symptoms" ? "active" : ""} onClick={() => setMode("symptoms")} data-testid="search-by-symptoms-tab"><MessageSquareText size={16} /> Describe symptoms</button></div>{mode !== "symptoms" && <div className="search-input-wrap"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={mode === "hospital" ? "Search hospital or area" : "Search specialty or doctor name"} data-testid="patient-search-input" />{query && <button onClick={() => setQuery("")} data-testid="clear-search-button"><X size={16} /></button>}</div>}</div>{mode === "symptoms" ? <SymptomTriage onOpenHospital={(id) => { setSelected(id); setQuery(""); setMode("hospital"); }} /> : mode === "hospital" ? <><div className="result-bar"><span><strong>{filtered.length}</strong> hospitals in directory</span><span className="result-updated"><Clock3 size={14} /> Bed capacity updates live once staff confirm it</span></div><div className="results-grid">{filtered.map((hospital) => <HospitalCard key={hospital.id} hospital={hospital} selected={selected === hospital.id} onSelect={setSelected} live={statusMap[hospital.id]} />)}</div>{filtered.length === 0 && <div className="empty-state" data-testid="no-hospital-results">No hospitals match that search.</div>}</> : <div className="doctor-results"><div className="result-bar"><span><strong>{doctors.length}</strong> specialists across the directory</span><span className="result-updated"><Clock3 size={14} /> Tap a doctor to view their profile</span></div><div className="doctor-search-list">{doctors.map(doc => <DoctorSearchRow key={doc.id} doc={doc} />)}{doctors.length === 0 && <div className="empty-state" data-testid="no-doctor-results">No specialists match that search.</div>}</div></div>}</main>; }
 function Login({ onClose, onSuccess }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");

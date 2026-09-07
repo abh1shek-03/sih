@@ -101,3 +101,39 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Import GitHub repo and then apply progressive disclosure everywhere: show ONE concise line per topic
+  (user-friendly summary), and hide details until the user clicks. Specifically: a doctor's name should
+  be visible but their specialties/experience/qualification should only appear on click. Same principle
+  everywhere.
+
+frontend:
+  - task: "Progressive disclosure hospital card + doctor profile expansion"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js, frontend/src/App.css, frontend/src/pages/Emergency.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Rewrote HospitalCard: collapsed card now shows only status pill, name, area·type, and one summary line (beds · N specialities · N doctors). Expanded card is a list of 7 collapsible HpRow sections (Address & directions, OPD hours, Consultation fees, Wards & beds, Specialities, Doctors, Emergency, Contact) — each showing icon + label + one-line teaser + chevron. New DoctorCollapsed component: shows only doctor name + status pill; clicking reveals specialty/experience/rating/qualification/designation/expertise. Doctor search results table replaced with DoctorSearchRow list following the same pattern. Emergency page emergency-hospital-card also converted to collapsible: name + one-line teaser (ICU x/y · phone), tap to reveal notes/ambulance/directions. Added CSS (.hp-row, .doctor-collapsed, .doctor-search, .card-summary) preserving existing teal/navy design language. All original data-testid values kept intact; new testids added: doctor-collapsed-{id}, doctor-expand-{id}, doctor-detail-{id}, doctor-search-expand-{id}, hp-row-{key}-{hospitalId}, hospital-summary-{id}, emergency-hospital-expand-{id}. Verified via screenshots on desktop viewport that collapsed → doctors section → first doctor profile flow works end-to-end and the doctor search tab also expands to reveal profile."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Progressive disclosure hospital card + doctor profile expansion"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "UI redesign only (no backend changes). Applied progressive disclosure across hospital cards, doctor rows (both inside a hospital and in the doctor search tab), and emergency hospital cards. All existing behavior preserved (live wards, staff-updated tags, map, directions, emergency line, ambulance, google maps link). Frontend compiled clean (1 pre-existing eslint warning, unrelated). Ready for user review; backend was not touched so no retest needed."
